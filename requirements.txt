@@ -1,0 +1,8 @@
+requests
+numpy
+rasterio
+pyproj
+shapely
+geopandas
+matplotlib
+python-dotenv
