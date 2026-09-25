@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { GridData, GridCell, VisualizationMode, TerrainDataPayload } from './types';
+import type { GridData, GridCell, VisualizationMode, TerrainDataPayload, StressType } from './types';
 import { Header } from './components/Header';
 import { InfoPanel } from './components/InfoPanel';
 import { LayerToggle } from './components/LayerToggle';
@@ -8,6 +8,7 @@ import { Legend } from './components/Legend';
 import { ThreeCanvas } from './components/ThreeCanvas';
 import { LoadingState } from './components/LoadingState';
 import { ErrorState } from './components/ErrorState';
+import { StressAnalysisPanel } from './components/StressAnalysisPanel';
 
 export const App: React.FC = () => {
   const [gridData, setGridData] = useState<GridData | null>(null);
@@ -16,7 +17,9 @@ export const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [mode, setMode] = useState<VisualizationMode>('satellite');
+  const [activeStressType, setActiveStressType] = useState<StressType>('none');
   const [selectedCell, setSelectedCell] = useState<GridCell | null>(null);
+  const [focusedCell, setFocusedCell] = useState<GridCell | null>(null);
   const [resetViewTrigger, setResetViewTrigger] = useState<number>(0);
   const [exaggeration, setExaggeration] = useState<number>(1.5);
 
@@ -25,6 +28,8 @@ export const App: React.FC = () => {
   const [satelliteFailed, setSatelliteFailed] = useState(false);
 
   // Layer toggles derived from mode
+  // If activeStressType is not 'none', it overrides mode rendering internally in ThreeCanvas,
+  // but we keep mode to dictate base layers when stress is turned off
   const showSatellite = mode === 'satellite' || mode === 'satellite-ndvi';
   const showNDVI = mode === 'ndvi' || mode === 'satellite-ndvi';
   const [showCrops, setShowCrops] = useState(true);
@@ -64,6 +69,11 @@ export const App: React.FC = () => {
     setSatelliteLoaded(loaded);
     setSatelliteFailed(failed);
   };
+  
+  const handleSelectCellFromPanel = (cell: GridCell) => {
+    setFocusedCell(cell);
+    setSelectedCell(cell);
+  };
 
   if (loading) {
     return <LoadingState message="Loading live Sentinel-2 satellite data and Copernicus DEM terrain..." />;
@@ -90,22 +100,27 @@ export const App: React.FC = () => {
             gridData={gridData}
             showNDVI={showNDVI}
             showSatellite={showSatellite}
+            activeStressType={activeStressType}
             showCrops={showCrops}
             showGrid={showGrid}
             showBoundary={showBoundary}
             exaggeration={exaggeration}
+            focusedCell={focusedCell}
             onSelectCell={setSelectedCell}
             onSatelliteStatus={handleSatelliteStatus}
             resetViewTrigger={resetViewTrigger}
           />
         </div>
 
-        <aside className="sidebar-overlay" style={{
-          position: 'absolute', top: '1rem', left: '1rem', bottom: '1rem',
-          width: '22rem', display: 'flex', flexDirection: 'column', gap: '0.6rem',
-          pointerEvents: 'none', zIndex: 20
-        }}>
-          <div style={{ pointerEvents: 'auto', display: 'flex', flexDirection: 'column', gap: '0.6rem', overflowY: 'auto', paddingRight: '0.25rem', maxHeight: '100%' }} className="custom-scrollbar">
+        <div className="side-panel">
+          <div className="side-panel-content custom-scrollbar">
+            <StressAnalysisPanel
+              gridData={gridData}
+              activeStressType={activeStressType}
+              onStressTypeChange={setActiveStressType}
+              onSelectCell={handleSelectCellFromPanel}
+            />
+
             <LayerToggle
               mode={mode}
               onModeChange={setMode}
@@ -126,7 +141,7 @@ export const App: React.FC = () => {
 
             <InfoPanel metadata={gridData.metadata} satelliteLoaded={satelliteLoaded} />
           </div>
-        </aside>
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Satellite, Layers, Eye, Grid3x3, Square, Mountain, Sprout } from 'lucide-react';
+import { Satellite, Layers, Eye, Grid3x3, Square, Mountain, Sprout, ChevronDown, ChevronUp } from 'lucide-react';
 import type { VisualizationMode, GridMetadata } from '../types';
 
 interface LayerToggleProps {
@@ -44,11 +44,15 @@ export const LayerToggle: React.FC<LayerToggleProps> = ({
   exaggeration, onExaggerationChange,
   metadata,
 }) => {
+  const [expanded, setExpanded] = React.useState(true);
+
   return (
     <div className="card">
-      <div className="card-header">
+      <div className="card-header card-header-clickable" onClick={() => setExpanded(!expanded)}>
         <span className="card-title"><Satellite className="icon-sm" style={{ color: '#38bdf8' }} /> View Mode</span>
+        {expanded ? <ChevronUp className="icon-xs" /> : <ChevronDown className="icon-xs" />}
       </div>
+      {expanded && (
       <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
         {/* View mode buttons */}
         <div className="mode-toggle-group">
@@ -111,6 +115,7 @@ export const LayerToggle: React.FC<LayerToggleProps> = ({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };

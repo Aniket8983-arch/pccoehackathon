@@ -196,6 +196,34 @@ export class TerrainScene {
     this.controls.update();
   }
 
+  flyToCell(col: number, row: number) {
+    if (!this.terrainData) return;
+    const { rows, cols } = this.terrainData;
+    
+    // Map grid coordinates to world coordinates (-width/2 to +width/2)
+    const x = (col / (cols - 1)) * this.fieldWidth - this.fieldWidth / 2;
+    const z = (row / (rows - 1)) * this.fieldDepth - this.fieldDepth / 2;
+    
+    // Get elevation
+    const { elevations, min_elevation, max_elevation } = this.terrainData;
+    const elev = elevations[row]?.[col] ?? min_elevation;
+    const elevRange = max_elevation - min_elevation || 1;
+    const norm = (elev - min_elevation) / elevRange;
+    const y = TerrainScene.computeY(norm, this.exaggeration, this.fieldWidth);
+    
+    // Calculate new target (the cell)
+    this.controls.target.set(x, y, z);
+    
+    // Set camera close to it (offset)
+    this.camera.position.set(
+      x + this.fieldWidth * 0.05,
+      y + this.fieldWidth * 0.05,
+      z + this.fieldDepth * 0.05
+    );
+    
+    this.controls.update();
+  }
+
   setTerrainVisible(visible: boolean) {
     if (this.terrainMesh) this.terrainMesh.visible = visible;
   }

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Palette } from 'lucide-react';
+import React, { useState } from 'react';
+import { Palette, ChevronDown, ChevronUp } from 'lucide-react';
 import type { VisualizationMode, GridMetadata } from '../types';
 
 interface LegendProps {
@@ -8,11 +8,15 @@ interface LegendProps {
 }
 
 export const Legend: React.FC<LegendProps> = ({ mode, metadata }) => {
+  const [expanded, setExpanded] = useState(false); // Collapsed by default to save space
+
   return (
     <div className="card">
-      <div className="card-header">
+      <div className="card-header card-header-clickable" onClick={() => setExpanded(!expanded)}>
         <span className="card-title"><Palette className="icon-sm" style={{ color: '#a78bfa' }} /> Legend</span>
+        {expanded ? <ChevronUp className="icon-xs" /> : <ChevronDown className="icon-xs" />}
       </div>
+      {expanded && (
       <div className="card-body legend-card">
         {mode === 'satellite' && (
           <div>
@@ -70,6 +74,7 @@ export const Legend: React.FC<LegendProps> = ({ mode, metadata }) => {
           <span className="nodata-swatch" /> No data / masked
         </div>
       </div>
+      )}
     </div>
   );
 };

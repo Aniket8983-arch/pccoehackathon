@@ -16,7 +16,23 @@ export interface GridMetadata {
   elevation_range_m: [number, number] | null;
   slope_range_deg: [number, number] | null;
   generated_at: string;
+  intelligence_updated_at?: string;
+  weather_summary?: {
+    past_7d_precip_mm: number;
+    past_7d_et0_mm: number;
+    water_deficit_mm: number;
+    avg_tmax_c: number;
+  };
 }
+
+export interface StressData {
+  score: number;
+  level: 'Low' | 'Moderate' | 'High' | 'Critical';
+  factors: string[];
+  recommendation: string;
+}
+
+export type StressType = 'none' | 'overall' | 'water' | 'heat' | 'disease' | 'vegetation';
 
 export interface GridCell {
   cell_id: string;
@@ -33,6 +49,18 @@ export interface GridCell {
   elevation_m: number | null;
   slope_deg: number | null;
   low_vegetation_index: boolean | null;
+  
+  stress_overall?: StressData;
+  stress_water?: StressData;
+  stress_heat?: StressData;
+  stress_disease?: StressData;
+  stress_vegetation?: StressData;
+
+  // Legacy fields for backward compatibility
+  stress_score?: number;
+  stress_level?: 'None' | 'Low' | 'Moderate' | 'High' | 'Critical';
+  stress_factors?: string[];
+  recommendation?: string;
 }
 
 export interface GridData {

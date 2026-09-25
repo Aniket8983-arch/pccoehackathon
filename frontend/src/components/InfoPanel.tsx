@@ -1,5 +1,5 @@
-import React from 'react';
-import { MapPin, Sprout, Satellite, Mountain, Calendar, Grid3x3, Maximize, Database, Map } from 'lucide-react';
+import React, { useState } from 'react';
+import { MapPin, Sprout, Satellite, Mountain, Calendar, Grid3x3, Maximize, Database, Map, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import type { GridMetadata } from '../types';
 
 interface InfoPanelProps {
@@ -8,6 +8,10 @@ interface InfoPanelProps {
 }
 
 export const InfoPanel: React.FC<InfoPanelProps> = ({ metadata, satelliteLoaded }) => {
+  const [farmExpanded, setFarmExpanded] = useState(false);
+  const [weatherExpanded, setWeatherExpanded] = useState(false);
+  const [dataExpanded, setDataExpanded] = useState(false);
+
   const bbox = metadata.aoi_bbox_4326;
   const centerLat = bbox ? ((bbox[1] + bbox[3]) / 2).toFixed(5) : 'Unknown';
   const centerLon = bbox ? ((bbox[0] + bbox[2]) / 2).toFixed(5) : 'Unknown';
@@ -21,6 +25,11 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ metadata, satelliteLoaded 
     <>
       {/* Location & Crop Card */}
       <div className="card" style={{ borderLeft: '3px solid #10b981' }}>
+        <div className="card-header card-header-clickable" onClick={() => setFarmExpanded(!farmExpanded)}>
+          <span className="card-title"><Info className="icon-sm" style={{ color: '#10b981' }} /> Farm Information</span>
+          {farmExpanded ? <ChevronUp className="icon-xs" /> : <ChevronDown className="icon-xs" />}
+        </div>
+        {farmExpanded && (
         <div className="card-body" style={{ padding: '0.8rem' }}>
           <p style={{ margin: '0 0 0.6rem', fontSize: '0.8rem', fontWeight: 600, color: '#e2e8f0', lineHeight: 1.5 }}>
             Viewing a tomato field in Maharashtra, India.
@@ -47,13 +56,53 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ metadata, satelliteLoaded 
             Crop type supplied for this field.
           </div>
         </div>
+        )}
       </div>
+
+      {/* Weather Summary Card */}
+      {metadata.weather_summary && (
+        <div className="card">
+          <div className="card-header card-header-clickable" onClick={() => setWeatherExpanded(!weatherExpanded)}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Calendar className="icon-sm" style={{ color: '#fbbf24' }} />
+              <span className="card-title" style={{ display: 'inline' }}>Past 7 Days Weather</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.6rem', color: '#94a3b8' }}>Open-Meteo</span>
+              {weatherExpanded ? <ChevronUp className="icon-xs" /> : <ChevronDown className="icon-xs" />}
+            </div>
+          </div>
+          {weatherExpanded && (
+          <div className="card-body">
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <div className="mini-stat" style={{ flex: 1 }}>
+                <div className="mini-stat-val" style={{ color: '#38bdf8' }}>{metadata.weather_summary.past_7d_precip_mm} mm</div>
+                <div className="mini-stat-lbl">Precipitation</div>
+              </div>
+              <div className="mini-stat" style={{ flex: 1 }}>
+                <div className="mini-stat-val" style={{ color: '#f87171' }}>{metadata.weather_summary.past_7d_et0_mm} mm</div>
+                <div className="mini-stat-lbl">Evapotranspiration</div>
+              </div>
+            </div>
+            
+            <div style={{ padding: '0.4rem', background: 'rgba(0,0,0,0.2)', borderRadius: '0.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.65rem', color: '#cbd5e1' }}>Water Deficit:</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: metadata.weather_summary.water_deficit_mm > 10 ? '#ef4444' : '#34d399' }}>
+                {metadata.weather_summary.water_deficit_mm > 0 ? '-' : '+'}{Math.abs(metadata.weather_summary.water_deficit_mm)} mm
+              </span>
+            </div>
+          </div>
+          )}
+        </div>
+      )}
 
       {/* Data Sources Card */}
       <div className="card">
-        <div className="card-header">
+        <div className="card-header card-header-clickable" onClick={() => setDataExpanded(!dataExpanded)}>
           <span className="card-title"><Database className="icon-sm" style={{ color: '#a78bfa' }} /> Data Sources</span>
+          {dataExpanded ? <ChevronUp className="icon-xs" /> : <ChevronDown className="icon-xs" />}
         </div>
+        {dataExpanded && (
         <div className="card-body">
           <div className="grid-meta-list">
             <div className="meta-item">
@@ -107,6 +156,7 @@ export const InfoPanel: React.FC<InfoPanelProps> = ({ metadata, satelliteLoaded 
             Sentinel-2 spatial resolution: approximately 10 m for the selected bands (B04, B08). Elevation from {metadata.dem_source}. Terrain exaggeration applied for visual depth.
           </div>
         </div>
+        )}
       </div>
     </>
   );

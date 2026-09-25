@@ -4,19 +4,22 @@ import { TerrainScene } from '../three/TerrainScene';
 import { NDVILayer } from '../three/NDVILayer';
 import { SatelliteTextureLayer } from '../three/SatelliteTextureLayer';
 import { CropRenderer } from '../three/CropRenderer';
+import { StressRiskLayer } from '../three/StressRiskLayer';
 import { GridOverlay } from '../three/GridOverlay';
 import { FieldBoundary } from '../three/FieldBoundary';
-import type { TerrainDataPayload, GridData, GridCell } from '../types';
+import type { TerrainDataPayload, GridData, GridCell, StressType } from '../types';
 
 interface ThreeCanvasProps {
   terrainData: TerrainDataPayload | null;
   gridData: GridData | null;
   showNDVI: boolean;
   showSatellite: boolean;
+  activeStressType: StressType;
   showCrops: boolean;
   showGrid: boolean;
   showBoundary: boolean;
   exaggeration: number;
+  focusedCell: GridCell | null;
   onSelectCell: (cell: GridCell | null) => void;
   onSatelliteStatus: (loaded: boolean, failed: boolean) => void;
   resetViewTrigger: number;
@@ -27,10 +30,12 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
   gridData,
   showNDVI,
   showSatellite,
+  activeStressType,
   showCrops,
   showGrid,
   showBoundary,
   exaggeration,
+  focusedCell,
   onSelectCell,
   onSatelliteStatus,
   resetViewTrigger
@@ -39,6 +44,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
   const sceneRef = useRef<TerrainScene | null>(null);
   const ndviLayerRef = useRef<NDVILayer | null>(null);
   const satLayerRef = useRef<SatelliteTextureLayer | null>(null);
+  const stressLayerRef = useRef<StressRiskLayer | null>(null);
   const cropRef = useRef<CropRenderer | null>(null);
   const gridOverlayRef = useRef<GridOverlay | null>(null);
   const boundaryRef = useRef<FieldBoundary | null>(null);
@@ -59,6 +65,9 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
 
     const satLayer = new SatelliteTextureLayer();
     satLayerRef.current = satLayer;
+
+    const stressLayer = new StressRiskLayer();
+    stressLayerRef.current = stressLayer;
 
     const crop = new CropRenderer();
     terrainScene.getScene().add(crop.getGroup());
@@ -86,6 +95,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       terrainScene.dispose();
       ndviLayer.dispose();
       satLayer.dispose();
+      stressLayer.dispose();
       crop.dispose();
       gridOv.dispose();
       boundary.dispose();
@@ -111,12 +121,15 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
         if (sat.isLoaded()) sat.setActive(true);
       }
       ndviLayerRef.current?.apply(mesh, terrainData);
+      if (gridData) {
+        stressLayerRef.current?.apply(mesh, terrainData, gridData, activeStressType);
+      }
     }
 
     cropRef.current?.generate(terrainData, exag);
     gridOverlayRef.current?.generate(terrainData, exag);
     boundaryRef.current?.generate(terrainData, exag);
-  }, [terrainData]);
+  }, [terrainData, gridData]); // Note: not depending on activeStressType intentionally for initial mount
 
   // Handle exaggeration changes
   useEffect(() => {
@@ -134,19 +147,38 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
   useEffect(() => {
     const sat = satLayerRef.current;
     const ndvi = ndviLayerRef.current;
-    if (!sat || !ndvi) return;
+    const stress = stressLayerRef.current;
+    if (!sat || !ndvi || !stress) return;
 
-    if (showNDVI) {
+    if (activeStressType !== 'none') {
       sat.setActive(false);
+      ndvi.setActive(false);
+      stress.setActive(true);
+      
+      const mesh = sceneRef.current?.getTerrainMesh();
+      if (mesh && terrainDataRef.current && gridData) {
+        stress.apply(mesh, terrainDataRef.current, gridData, activeStressType);
+      }
+    } else if (showNDVI) {
+      sat.setActive(false);
+      stress.setActive(false);
       ndvi.setActive(true);
+      
+      const mesh = sceneRef.current?.getTerrainMesh();
+      if (mesh && terrainDataRef.current) ndvi.apply(mesh, terrainDataRef.current);
     } else if (showSatellite) {
       ndvi.setActive(false);
+      stress.setActive(false);
       sat.setActive(true);
+      
+      const mesh = sceneRef.current?.getTerrainMesh();
+      if (mesh) sat.apply(mesh);
     } else {
       ndvi.setActive(false);
       sat.setActive(false);
+      stress.setActive(false);
     }
-  }, [showNDVI, showSatellite]);
+  }, [showNDVI, showSatellite, activeStressType, gridData]);
 
   useEffect(() => { cropRef.current?.setVisible(showCrops); }, [showCrops]);
   useEffect(() => { gridOverlayRef.current?.setVisible(showGrid); }, [showGrid]);
@@ -156,6 +188,13 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
   useEffect(() => {
     if (resetViewTrigger > 0) sceneRef.current?.resetCamera();
   }, [resetViewTrigger]);
+  
+  // Fly to focused cell
+  useEffect(() => {
+    if (focusedCell) {
+      sceneRef.current?.flyToCell(focusedCell.col, focusedCell.row);
+    }
+  }, [focusedCell]);
 
   // Click handler for cell inspection
   const handleClick = useCallback((e: React.MouseEvent) => {

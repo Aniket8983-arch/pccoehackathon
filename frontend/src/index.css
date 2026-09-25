@@ -169,6 +169,7 @@ body {
   backdrop-filter: blur(16px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .card-header {
@@ -191,6 +192,39 @@ body {
 
 .card-body {
   padding: 0.75rem 0.85rem;
+}
+
+/* Side Panel Layout */
+.side-panel {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    bottom: 10px; /* Constrains it to the parent container's height minus 10px padding */
+    width: 22rem;
+    z-index: 20;
+    pointer-events: none;
+    display: flex; /* So the content inside can grow and scroll properly */
+}
+
+.side-panel-content {
+    flex: 1; /* Takes up the available space within .side-panel */
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    pointer-events: auto;
+}
+
+.card-header-clickable {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.card-header-clickable:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Icons sizing */
