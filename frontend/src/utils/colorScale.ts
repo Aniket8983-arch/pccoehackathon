@@ -1,4 +1,3 @@
-import type { LayerMode } from '../types';
 
 export function getNdviColor(val: number | null | undefined): string {
   if (val === null || val === undefined || isNaN(val)) return '#475569'; // Unavailable / Invalid pixel
@@ -48,7 +47,7 @@ export function getSlopeColor(val: number | null | undefined, minSlope = 0.0, ma
 
 export function getCellColor(
   cell: { valid: boolean; ndvi_mean: number | null; elevation_m: number | null; slope_deg: number | null },
-  mode: LayerMode,
+  mode: string,
   elevRange: [number, number] = [544.4, 553.2],
   slopeRange: [number, number] = [0.05, 2.13]
 ): string {

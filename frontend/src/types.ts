@@ -1,10 +1,7 @@
 export interface GridMetadata {
-  aoi_bbox_4326: [number, number, number, number]; // [west, south, east, north]
+  aoi_bbox_4326: [number, number, number, number];
   crs: string;
-  pixel_size_m: {
-    dx: number;
-    dy: number;
-  };
+  pixel_size_m: { dx: number; dy: number };
   grid_rows: number;
   grid_cols: number;
   total_cells: number;
@@ -15,9 +12,9 @@ export interface GridMetadata {
   dem_source: string;
   low_vegetation_ndvi_threshold: number;
   low_vegetation_cell_count: number;
-  ndvi_range: [number, number];
-  elevation_range_m: [number, number];
-  slope_range_deg: [number, number];
+  ndvi_range: [number, number] | null;
+  elevation_range_m: [number, number] | null;
+  slope_range_deg: [number, number] | null;
   generated_at: string;
 }
 
@@ -35,7 +32,7 @@ export interface GridCell {
   ndvi_max: number | null;
   elevation_m: number | null;
   slope_deg: number | null;
-  low_vegetation_index: boolean;
+  low_vegetation_index: boolean | null;
 }
 
 export interface GridData {
@@ -43,6 +40,19 @@ export interface GridData {
   cells: GridCell[];
 }
 
-export type LayerMode = 'ndvi' | 'elevation' | 'slope';
+// Satellite View = real satellite imagery on terrain
+// NDVI View = NDVI color-coded overlay on terrain
+// Satellite + NDVI View = satellite with semi-transparent NDVI highlights
+export type VisualizationMode = 'satellite' | 'ndvi' | 'satellite-ndvi';
 
-export type BaseMapStyle = 'satellite' | 'dark' | 'streets';
+export interface TerrainDataPayload {
+  rows: number;
+  cols: number;
+  elevations: number[][];
+  ndvi: number[][];
+  min_elevation: number;
+  max_elevation: number;
+  min_ndvi: number;
+  max_ndvi: number;
+  bbox: [number, number, number, number];
+}

@@ -1,168 +1,88 @@
 import React from 'react';
+import { Crosshair, MapPin, Mountain, Leaf, Satellite, TrendingUp } from 'lucide-react';
 import type { GridCell } from '../types';
-import { Crosshair, MapPin, Leaf, Mountain, TrendingUp, CheckCircle, Calendar, Hash, ShieldAlert } from 'lucide-react';
 
 interface CellInspectorProps {
   selectedCell: GridCell | null;
-  sentinelDate?: string;
+  sentinelDate: string;
+}
+
+function getVegetationStatus(ndvi: number | null): { label: string; color: string } {
+  if (ndvi === null) return { label: 'No data', color: '#64748b' };
+  if (ndvi >= 0.6) return { label: 'Dense healthy vegetation', color: '#22c55e' };
+  if (ndvi >= 0.4) return { label: 'Moderate vegetation', color: '#84cc16' };
+  if (ndvi >= 0.2) return { label: 'Sparse vegetation', color: '#f59e0b' };
+  if (ndvi >= 0.0) return { label: 'Bare soil / minimal vegetation', color: '#d97706' };
+  return { label: 'Water / non-vegetated', color: '#3b82f6' };
 }
 
 export const CellInspector: React.FC<CellInspectorProps> = ({ selectedCell, sentinelDate }) => {
   if (!selectedCell) {
     return (
-      <div className="card cell-inspector empty-inspector">
+      <div className="card">
         <div className="card-header">
-          <div className="card-title">
-            <Crosshair className="icon-sm text-sky-400" />
-            <span>Cell Inspector</span>
-          </div>
+          <span className="card-title"><Crosshair className="icon-sm" style={{ color: '#38bdf8' }} /> Cell Inspector</span>
         </div>
-        <div className="card-body text-center text-slate-400 py-6">
-          <MapPin className="icon-lg mx-auto mb-2 text-slate-500 animate-bounce" />
-          <p className="font-medium">Click any cell on the grid map</p>
-          <p className="text-xs text-slate-500 mt-1">
-            View real-time Sentinel-2 & DEM values directly measured at that ~10m cell location.
-          </p>
+        <div className="card-body" style={{ textAlign: 'center', padding: '1rem', color: '#64748b', fontSize: '0.72rem' }}>
+          Click on the 3D terrain to inspect a 10 m × 10 m grid cell
         </div>
       </div>
     );
   }
 
-  const isNdviAvailable = selectedCell.ndvi_mean !== null && selectedCell.ndvi_mean !== undefined;
-  const isElevAvailable = selectedCell.elevation_m !== null && selectedCell.elevation_m !== undefined;
-  const isSlopeAvailable = selectedCell.slope_deg !== null && selectedCell.slope_deg !== undefined;
+  const veg = getVegetationStatus(selectedCell.ndvi_mean);
 
   return (
-    <div className="card cell-inspector">
-      <div className="card-header border-b border-slate-700/50">
-        <div className="card-title">
-          <Crosshair className="icon-sm text-amber-400" />
-          <span>Selected Cell: <span className="text-white font-mono">{selectedCell.cell_id}</span></span>
-        </div>
+    <div className="card">
+      <div className="card-header">
+        <span className="card-title"><Crosshair className="icon-sm" style={{ color: '#38bdf8' }} /> {selectedCell.cell_id}</span>
         <span className={`status-pill ${selectedCell.valid ? 'pill-valid' : 'pill-invalid'}`}>
-          {selectedCell.valid ? 'Valid Cell' : 'Unavailable'}
+          {selectedCell.valid ? 'Valid' : 'Masked'}
         </span>
       </div>
-
-      <div className="card-body space-y-3">
-        {/* Cell Row & Column */}
-        <div className="grid grid-cols-2 gap-2">
-          <div className="inspector-chip">
-            <Hash className="icon-xs text-slate-400" />
-            <div>
-              <div className="chip-label">Grid Row</div>
-              <div className="chip-value">{selectedCell.row}</div>
-            </div>
-          </div>
-
-          <div className="inspector-chip">
-            <Hash className="icon-xs text-slate-400" />
-            <div>
-              <div className="chip-label">Grid Column</div>
-              <div className="chip-value">{selectedCell.col}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Center Geo Coordinates */}
+      <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
         <div className="inspector-chip accent-sky">
-          <MapPin className="icon-xs text-sky-400" />
+          <MapPin className="icon-xs" style={{ color: '#38bdf8' }} />
           <div>
-            <div className="chip-label">Center Latitude / Longitude</div>
-            <div className="chip-value font-mono">
-              {selectedCell.center_lat.toFixed(6)}° N, {selectedCell.center_lon.toFixed(6)}° E
+            <div className="chip-label">Coordinates</div>
+            <div className="chip-value" style={{ fontFamily: 'monospace', fontSize: '0.68rem' }}>
+              {selectedCell.center_lat.toFixed(5)}°N, {selectedCell.center_lon.toFixed(5)}°E
             </div>
           </div>
         </div>
 
-        {/* Primary Raster Measurements */}
-        <div className="inspector-measurements space-y-2">
-          {/* NDVI */}
-          <div className="measurement-card">
-            <div className="meas-header">
-              <span className="meas-title">
-                <Leaf className="icon-xs text-emerald-400" />
-                <span>NDVI (Mean)</span>
-              </span>
-              <span className="meas-val text-emerald-400 font-mono">
-                {isNdviAvailable ? selectedCell.ndvi_mean!.toFixed(4) : <span className="text-slate-400 italic">Unavailable</span>}
-              </span>
-            </div>
-            {isNdviAvailable && (
-              <div className="meas-sub font-mono text-slate-400 text-xs flex justify-between">
-                <span>Min: {selectedCell.ndvi_min?.toFixed(4)}</span>
-                <span>Max: {selectedCell.ndvi_max?.toFixed(4)}</span>
-              </div>
-            )}
-            {!isNdviAvailable && (
-              <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
-                <ShieldAlert className="icon-xs text-slate-400" />
-                <span>Pixel masked or missing satellite coverage</span>
-              </div>
-            )}
+        <div className="measurement-card">
+          <div className="meas-header">
+            <span className="meas-title"><Mountain className="icon-xs" style={{ color: '#f59e0b' }} /> Elevation</span>
+            <span className="meas-val" style={{ color: '#fbbf24' }}>
+              {selectedCell.elevation_m !== null ? `${selectedCell.elevation_m.toFixed(1)} m` : 'N/A'}
+            </span>
           </div>
+          {selectedCell.slope_deg !== null && (
+            <div className="meas-sub" style={{ fontSize: '0.63rem', color: '#94a3b8' }}>
+              <TrendingUp className="icon-xs" style={{ display: 'inline', verticalAlign: 'middle' }} /> Slope: {selectedCell.slope_deg.toFixed(2)}°
+            </div>
+          )}
+        </div>
 
-          {/* Elevation */}
-          <div className="measurement-card">
-            <div className="meas-header">
-              <span className="meas-title">
-                <Mountain className="icon-xs text-amber-400" />
-                <span>Elevation</span>
-              </span>
-              <span className="meas-val text-amber-300 font-mono">
-                {isElevAvailable ? `${selectedCell.elevation_m!.toFixed(2)} m` : <span className="text-slate-400 italic">Unavailable</span>}
-              </span>
-            </div>
-            <div className="meas-sub text-slate-400 text-xs">
-              Source: Copernicus DEM 90m
-            </div>
+        <div className="measurement-card">
+          <div className="meas-header">
+            <span className="meas-title"><Leaf className="icon-xs" style={{ color: '#10b981' }} /> NDVI</span>
+            <span className="meas-val" style={{ color: '#34d399' }}>
+              {selectedCell.ndvi_mean !== null ? selectedCell.ndvi_mean.toFixed(4) : 'N/A'}
+            </span>
           </div>
-
-          {/* Slope */}
-          <div className="measurement-card">
-            <div className="meas-header">
-              <span className="meas-title">
-                <TrendingUp className="icon-xs text-orange-400" />
-                <span>Slope</span>
-              </span>
-              <span className="meas-val text-orange-300 font-mono">
-                {isSlopeAvailable ? `${selectedCell.slope_deg!.toFixed(2)}°` : <span className="text-slate-400 italic">Unavailable</span>}
-              </span>
-            </div>
-            <div className="meas-sub text-slate-400 text-xs">
-              Real-world distance terrain gradient
-            </div>
+          <div className="meas-sub" style={{ fontSize: '0.63rem', marginTop: '0.2rem' }}>
+            <span style={{ color: veg.color, fontWeight: 600 }}>{veg.label}</span>
           </div>
         </div>
 
-        {/* Pixel Count & Acquisition Date */}
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="inspector-meta-box">
-            <CheckCircle className="icon-xs text-emerald-400" />
-            <div>
-              <span className="block text-slate-400">Valid Pixels</span>
-              <span className="font-semibold text-slate-200">{selectedCell.valid_pixel_count}</span>
-            </div>
-          </div>
-
-          <div className="inspector-meta-box">
-            <Calendar className="icon-xs text-sky-400" />
-            <div>
-              <span className="block text-slate-400">Sentinel Scene Date</span>
-              <span className="font-semibold text-slate-200 truncate block title={sentinelDate}">
-                {sentinelDate ? new Date(sentinelDate).toLocaleDateString() : '2026-06-02'}
-              </span>
-            </div>
+        <div className="inspector-meta-box">
+          <Satellite className="icon-xs" style={{ color: '#38bdf8' }} />
+          <div style={{ fontSize: '0.62rem', color: '#94a3b8' }}>
+            Sentinel-2 · {sentinelDate ? new Date(sentinelDate).toLocaleDateString() : 'N/A'}
           </div>
         </div>
-
-        {/* Low Vegetation Warning Flag */}
-        {selectedCell.low_vegetation_index && (
-          <div className="warning-banner">
-            <ShieldAlert className="icon-xs text-amber-400 flex-shrink-0" />
-            <span>Low Vegetation Index (&lt; 0.2 NDVI): Sparse canopy or bare ground.</span>
-          </div>
-        )}
       </div>
     </div>
   );
