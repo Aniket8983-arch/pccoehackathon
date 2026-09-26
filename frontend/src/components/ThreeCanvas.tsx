@@ -95,7 +95,7 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       terrainScene.dispose();
       ndviLayer.dispose();
       satLayer.dispose();
-      stressLayer.dispose();
+      stressLayer.dispose(terrainScene.getScene());
       crop.dispose();
       gridOv.dispose();
       boundary.dispose();
@@ -122,7 +122,11 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
       }
       ndviLayerRef.current?.apply(mesh, terrainData);
       if (gridData) {
-        stressLayerRef.current?.apply(mesh, terrainData, gridData, activeStressType);
+        const scene = sceneRef.current?.getScene();
+        const geom = sceneRef.current?.getTerrainGeometry();
+        if (scene && geom) {
+          stressLayerRef.current?.apply(scene, geom, terrainData, gridData, activeStressType);
+        }
       }
     }
 
@@ -150,35 +154,37 @@ export const ThreeCanvas: React.FC<ThreeCanvasProps> = ({
     const stress = stressLayerRef.current;
     if (!sat || !ndvi || !stress) return;
 
-    if (activeStressType !== 'none') {
-      sat.setActive(false);
-      ndvi.setActive(false);
-      stress.setActive(true);
-      
-      const mesh = sceneRef.current?.getTerrainMesh();
-      if (mesh && terrainDataRef.current && gridData) {
-        stress.apply(mesh, terrainDataRef.current, gridData, activeStressType);
+    // Determine Base Layer (Satellite or NDVI)
+    // If stress is active, we STILL want the base layer underneath!
+    const mesh = sceneRef.current?.getTerrainMesh();
+    if (mesh) {
+      if (showNDVI) {
+        sat.setActive(false);
+        ndvi.setActive(true);
+        if (terrainDataRef.current) ndvi.apply(mesh, terrainDataRef.current);
+      } else {
+        // Default to satellite base layer even if activeStressType is set
+        ndvi.setActive(false);
+        sat.setActive(true);
+        sat.apply(mesh);
       }
-    } else if (showNDVI) {
-      sat.setActive(false);
-      stress.setActive(false);
-      ndvi.setActive(true);
-      
-      const mesh = sceneRef.current?.getTerrainMesh();
-      if (mesh && terrainDataRef.current) ndvi.apply(mesh, terrainDataRef.current);
-    } else if (showSatellite) {
-      ndvi.setActive(false);
-      stress.setActive(false);
-      sat.setActive(true);
-      
-      const mesh = sceneRef.current?.getTerrainMesh();
-      if (mesh) sat.apply(mesh);
+    }
+
+    // Determine Stress Overlay
+    console.log('[ThreeCanvas] activeStressType =', activeStressType, 'gridData cells =', gridData?.cells?.length);
+    if (activeStressType !== 'none') {
+      const threeScene = sceneRef.current?.getScene();
+      const geom = sceneRef.current?.getTerrainGeometry();
+      const td = terrainDataRef.current;
+      console.log('[ThreeCanvas] scene=', !!threeScene, 'geom=', !!geom, 'terrainData=', !!td, 'gridData=', !!gridData);
+      if (threeScene && geom && td && gridData) {
+        stress.apply(threeScene, geom, td, gridData, activeStressType);
+        stress.setActive(true);
+      }
     } else {
-      ndvi.setActive(false);
-      sat.setActive(false);
       stress.setActive(false);
     }
-  }, [showNDVI, showSatellite, activeStressType, gridData]);
+  }, [showNDVI, showSatellite, activeStressType, gridData, terrainData]);
 
   useEffect(() => { cropRef.current?.setVisible(showCrops); }, [showCrops]);
   useEffect(() => { gridOverlayRef.current?.setVisible(showGrid); }, [showGrid]);

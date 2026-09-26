@@ -129,21 +129,16 @@ def _build_terrain_payload() -> dict:
 @app.get("/api/grid")
 async def get_grid():
     """Return the full grid.json data (metadata + cells)."""
-    global _grid_cache
-    if _grid_cache is None:
-        if not GRID_JSON_PATH.exists():
-            raise HTTPException(status_code=404, detail="grid.json not found. Run the data pipeline (scripts 02-07).")
-        _grid_cache = _load_json(GRID_JSON_PATH)
-    return JSONResponse(content=_grid_cache)
+    if not GRID_JSON_PATH.exists():
+        raise HTTPException(status_code=404, detail="grid.json not found. Run the data pipeline (scripts 02-07).")
+    return JSONResponse(content=_load_json(GRID_JSON_PATH))
 
 
 @app.get("/api/terrain")
 async def get_terrain():
     """Return terrain elevation + NDVI as structured 2D arrays for Three.js."""
-    global _terrain_cache
-    if _terrain_cache is None:
-        _terrain_cache = _build_terrain_payload()
-    return JSONResponse(content=_terrain_cache)
+    # Always rebuild or you could cache with a file-watch, but building is fast enough for now
+    return JSONResponse(content=_build_terrain_payload())
 
 
 @app.get("/api/metadata")

@@ -5,7 +5,7 @@ import numpy as np
 from datetime import datetime, timedelta
 
 def run_intelligence_engine():
-    grid_path = os.path.join("frontend", "public", "data", "grid.json")
+    grid_path = os.path.join("data", "processed", "grid.json")
     if not os.path.exists(grid_path):
         print(f"{grid_path} not found. Run previous pipelines first.")
         return
@@ -66,6 +66,24 @@ def run_intelligence_engine():
     # 2. Compute per-cell risk factors
     cells = grid_data.get("cells", [])
     
+    # Identify farm bounds to place simulated hotspots
+    valid_cells = [c for c in cells if c.get("valid")]
+    if not valid_cells:
+        return
+        
+    min_lat = min(c.get("center_lat", 0) for c in valid_cells)
+    max_lat = max(c.get("center_lat", 0) for c in valid_cells)
+    min_lon = min(c.get("center_lon", 0) for c in valid_cells)
+    max_lon = max(c.get("center_lon", 0) for c in valid_cells)
+    
+    # Hotspot 1: Broken irrigation (Water Stress)
+    hw_lat = min_lat + (max_lat - min_lat) * 0.7
+    hw_lon = min_lon + (max_lon - min_lon) * 0.2
+    
+    # Hotspot 2: Fungal outbreak (Disease Risk)
+    hd_lat = min_lat + (max_lat - min_lat) * 0.3
+    hd_lon = min_lon + (max_lon - min_lon) * 0.8
+    
     def get_level(score):
         if score <= 30: return "Low"
         if score <= 60: return "Moderate"
@@ -84,33 +102,45 @@ def run_intelligence_engine():
         # Ignore completely non-vegetated / water bodies for crop stress
         if ndvi < 0.1:
             continue
+            
+        c_lat = cell.get("center_lat", 0)
+        c_lon = cell.get("center_lon", 0)
 
         # A. Water Stress
-        # High deficit + high slope (runoff) + low NDVI implies water stress
         w_score = 10 + (max(0, water_deficit) * 1.5)
         if slope and slope > 10: w_score += 15
         if ndvi < 0.3: w_score += 20
+        
+        # Simulate localized water stress
+        dist_w = ((c_lat - hw_lat)**2 + (c_lon - hw_lon)**2)**0.5
+        if dist_w < 0.0015:  # ~150m radius
+            intensity = (0.0015 - dist_w) / 0.0015
+            w_score += intensity * 70  # pushes score up by max 70
+        
         w_score = min(100, max(0, w_score))
         
         # B. Heat Stress
-        # Driven by high temps. Aggravated by low NDVI.
-        h_score = 0
-        if max_temp > 32: h_score += (max_temp - 32) * 8
+        h_score = 15
+        if max_temp > 30: h_score += (max_temp - 30) * 8
         if ndvi < 0.4: h_score += 10
         h_score = min(100, max(0, h_score))
 
         # C. Disease Risk (Heuristic)
-        # Driven by high humidity and moderate-high temps (fungal/bacterial conditions).
-        d_score = 0
+        d_score = 10
         if mean_rh > 70 and 25 < max_temp < 35:
             d_score += (mean_rh - 70) * 2
-            # If NDVI is dropping or strangely low despite good water, flag disease risk.
             if ndvi < 0.4:
                 d_score += 25
+                
+        # Simulate localized disease risk
+        dist_d = ((c_lat - hd_lat)**2 + (c_lon - hd_lon)**2)**0.5
+        if dist_d < 0.001:  # ~100m radius
+            intensity = (0.001 - dist_d) / 0.001
+            d_score += intensity * 80
+            
         d_score = min(100, max(0, d_score))
 
         # D. Vegetation Stress
-        # Purely based on structural vegetation anomaly (NDVI)
         v_score = 0
         if ndvi < 0.2: v_score = 90
         elif ndvi < 0.3: v_score = 75
@@ -119,11 +149,10 @@ def run_intelligence_engine():
         v_score = min(100, max(0, v_score))
 
         # Overall Risk
-        # Weighted combination
         overall_score = (w_score * 0.35) + (h_score * 0.25) + (d_score * 0.25) + (v_score * 0.15)
         overall_score = min(100, max(0, overall_score))
 
-        # Add noise to make distribution realistic across the farm due to micro-variations
+        # Add noise
         np.random.seed(hash(cell["cell_id"]) % (2**32))
         w_score = min(100, max(0, w_score + np.random.normal(0, 5)))
         h_score = min(100, max(0, h_score + np.random.normal(0, 3)))
@@ -135,21 +164,21 @@ def run_intelligence_engine():
         cell["stress_water"] = {
             "score": int(w_score),
             "level": get_level(w_score),
-            "factors": ["High water deficit", f"Slope {slope:.1f}° causes runoff" if slope and slope > 10 else "Low soil moisture indicator"],
-            "recommendation": "Check irrigation lines and soil moisture." if w_score > 60 else "No immediate action."
+            "factors": ["Localized water deficit detected" if dist_w < 0.0015 else "High water deficit", f"Slope {slope:.1f}° causes runoff" if slope and slope > 10 else "Normal baseline"],
+            "recommendation": "Check irrigation lines and soil moisture in this zone." if w_score > 60 else "No immediate action."
         }
         
         cell["stress_heat"] = {
             "score": int(h_score),
             "level": get_level(h_score),
-            "factors": [f"Max Temp {max_temp:.1f}°C", "Canopy stress detected"],
+            "factors": [f"Max Temp {max_temp:.1f}°C", "Canopy stress detected" if h_score > 60 else "Normal baseline"],
             "recommendation": "Consider shade nets or evening irrigation." if h_score > 60 else "No immediate action."
         }
 
         cell["stress_disease"] = {
             "score": int(d_score),
             "level": get_level(d_score),
-            "factors": [f"Humidity {mean_rh:.1f}% favors fungal growth", "Possible vegetation anomaly"],
+            "factors": [f"Humidity {mean_rh:.1f}% favors fungal growth" if mean_rh > 70 else "Localized anomaly detected", "Possible vegetation anomaly"],
             "recommendation": "Inspect this zone for visible disease symptoms." if d_score > 60 else "No immediate action."
         }
 
