@@ -84,3 +84,51 @@ export interface TerrainDataPayload {
   max_ndvi: number;
   bbox: [number, number, number, number];
 }
+
+// ── Part B + C Types ─────────────────────────────────────────────────
+export interface ImageAnalysisResult {
+  crop: { name: string; confidence: number };
+  predictions: Array<{ class_name: string; confidence: number }>;
+  stress: {
+    disease: StressLevel;
+    water: StressLevel;
+    heat: StressLevel;
+    nutrient: StressLevel;
+    pest: StressLevel;
+  };
+}
+
+export interface StressLevel {
+  level: string;
+  confidence: number;
+  possible_conditions?: string[];
+  evidence?: string[];
+}
+
+export interface SoilParameter {
+  value: number | string | null;
+  unit: string;
+  status: string;
+  reference_range: string;
+}
+
+export interface SoilAnalysisResult {
+  parameters: Record<string, SoilParameter>;
+  extraction_method: string;
+  confidence: string;
+}
+
+export interface FullAnalysisResult {
+  analysis_id: string;
+  timestamp: string;
+  stress_assessment: Record<string, StressLevel>;
+  recommendations: string[];
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  evidence?: string[];
+  map_action?: { type: string; cell_id: string; lat: number; lon: number } | null;
+}

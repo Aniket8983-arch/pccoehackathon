@@ -15,15 +15,18 @@ import json
 import sys
 from pathlib import Path
 
+# ── Project paths (must be set before local imports) ──────────────────
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-# ── Project paths ─────────────────────────────────────────────────────
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+from backend.routes.ml_routes import router as ml_router
+from backend.routes.assistant_routes import router as assistant_router
 
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
@@ -46,9 +49,13 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Part B + C Routes ─────────────────────────────────────────────────
+app.include_router(ml_router)
+app.include_router(assistant_router)
 
 # ── Cache ─────────────────────────────────────────────────────────────
 _grid_cache: dict | None = None

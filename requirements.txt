@@ -6,3 +6,14 @@ shapely
 geopandas
 matplotlib
 python-dotenv
+fastapi
+uvicorn
+python-multipart
+groq
+PyMuPDF
+Pillow
+torch
+torchvision
+scikit-learn
+openpyxl
+pydantic-settings

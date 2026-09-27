@@ -26,3 +26,12 @@ data/processed/
 .idea/
 Thumbs.db
 .DS_Store
+
+# Machine Learning
+ml/models/*.pth
+ml/models/*.h5
+ml/models/*.pt
+datasets/
+dataset/
+*.npy
+*.pt

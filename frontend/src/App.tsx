@@ -9,6 +9,10 @@ import { ThreeCanvas } from './components/ThreeCanvas';
 import { LoadingState } from './components/LoadingState';
 import { ErrorState } from './components/ErrorState';
 import { StressAnalysisPanel } from './components/StressAnalysisPanel';
+import { CropAnalysisPanel } from './components/CropAnalysisPanel';
+import { SoilReportPanel } from './components/SoilReportPanel';
+import { AgriculturalAssistant } from './components/AgriculturalAssistant';
+import type { ImageAnalysisResult, SoilAnalysisResult } from './types';
 
 export const App: React.FC = () => {
   const [gridData, setGridData] = useState<GridData | null>(null);
@@ -22,6 +26,10 @@ export const App: React.FC = () => {
   const [focusedCell, setFocusedCell] = useState<GridCell | null>(null);
   const [resetViewTrigger, setResetViewTrigger] = useState<number>(0);
   const [exaggeration, setExaggeration] = useState<number>(1.5);
+
+  const [_imageResult, setImageResult] = useState<ImageAnalysisResult | null>(null);
+  const [_soilResult, setSoilResult] = useState<SoilAnalysisResult | null>(null);
+  const [analysisId, setAnalysisId] = useState<string | null>(null);
 
   // Live data status
   const [satelliteLoaded, setSatelliteLoaded] = useState(false);
@@ -75,6 +83,17 @@ export const App: React.FC = () => {
     setSelectedCell(cell);
   };
 
+  const handleMapAction = (action: { type: string; cell_id: string; lat: number; lon: number }) => {
+    // Find the cell by cell_id and focus it
+    if (gridData) {
+      const cell = gridData.cells.find(c => c.cell_id === action.cell_id);
+      if (cell) {
+        setFocusedCell(cell);
+        setSelectedCell(cell);
+      }
+    }
+  };
+
   if (loading) {
     return <LoadingState message="Loading live Sentinel-2 satellite data and Copernicus DEM terrain..." />;
   }
@@ -94,24 +113,6 @@ export const App: React.FC = () => {
       />
 
       <div style={{ flex: 1, display: 'flex', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ flex: 1, position: 'relative', height: '100%' }}>
-          <ThreeCanvas
-            terrainData={terrainData}
-            gridData={gridData}
-            showNDVI={showNDVI}
-            showSatellite={showSatellite}
-            activeStressType={activeStressType}
-            showCrops={showCrops}
-            showGrid={showGrid}
-            showBoundary={showBoundary}
-            exaggeration={exaggeration}
-            focusedCell={focusedCell}
-            onSelectCell={setSelectedCell}
-            onSatelliteStatus={handleSatelliteStatus}
-            resetViewTrigger={resetViewTrigger}
-          />
-        </div>
-
         <div className="side-panel">
           <div className="side-panel-content custom-scrollbar">
             <StressAnalysisPanel
@@ -119,6 +120,26 @@ export const App: React.FC = () => {
               activeStressType={activeStressType}
               onStressTypeChange={setActiveStressType}
               onSelectCell={handleSelectCellFromPanel}
+            />
+
+            <CropAnalysisPanel
+              selectedCell={selectedCell}
+              onAnalysisComplete={(result) => {
+                setImageResult(result);
+                setAnalysisId(`analysis-${Date.now()}`);
+              }}
+            />
+
+            <SoilReportPanel
+              onAnalysisComplete={(result) => {
+                setSoilResult(result);
+              }}
+            />
+
+            <AgriculturalAssistant
+              analysisId={analysisId}
+              selectedCell={selectedCell}
+              onMapAction={handleMapAction}
             />
 
             <LayerToggle
@@ -141,6 +162,24 @@ export const App: React.FC = () => {
 
             <InfoPanel metadata={gridData.metadata} satelliteLoaded={satelliteLoaded} />
           </div>
+        </div>
+
+        <div style={{ flex: 1, position: 'relative', height: '100%' }}>
+          <ThreeCanvas
+            terrainData={terrainData}
+            gridData={gridData}
+            showNDVI={showNDVI}
+            showSatellite={showSatellite}
+            activeStressType={activeStressType}
+            showCrops={showCrops}
+            showGrid={showGrid}
+            showBoundary={showBoundary}
+            exaggeration={exaggeration}
+            focusedCell={focusedCell}
+            onSelectCell={setSelectedCell}
+            onSatelliteStatus={handleSatelliteStatus}
+            resetViewTrigger={resetViewTrigger}
+          />
         </div>
       </div>
     </div>
