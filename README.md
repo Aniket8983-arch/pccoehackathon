@@ -1,314 +1,1159 @@
-# Crop Stress Detection — Geospatial Data Pipeline
+# 🌿 AI-Powered Crop Leaf Stress Detection & Analysis Module
 
-A Python data pipeline that builds a real geospatial crop-monitoring grid over
-an agricultural area using satellite imagery and elevation data from the
-Copernicus Data Space Ecosystem.
-
-> **This pipeline produces measurements, not diagnoses.**
-> Low NDVI values may indicate bare soil, fallow fields, recent harvest,
-> water bodies, or many other conditions — not exclusively crop disease.
-> The system does **not** diagnose disease from NDVI alone.
+## Part B — Multimodal Crop Image Analysis Pipeline
 
 ---
 
-## Data Sources
+> **This document exclusively covers the Crop Image Upload, Machine Learning Inference, and Multi-Factor Stress Analysis module (Part B) of the Crop Stress Detection & Field Advisory Platform. For Part A (Satellite, NDVI, DEM, CesiumJS 3D visualization) and Part C (Groq Conversational AI), please refer to the main project documentation.**
 
-### Sentinel-2 L2A (Multispectral Imagery)
+---
 
-| Band | Name | Resolution | Usage |
-|------|------|------------|-------|
-| B04 | Red | 10 m | NDVI calculation (reflectance) |
-| B08 | NIR | 10 m | NDVI calculation (reflectance) |
-| SCL | Scene Classification Layer | 20 m → 10 m (nearest-neighbor) | Cloud/shadow masking |
+## Table of Contents
 
-- **Collection:** `sentinel-2-l2a` (Level-2A, atmospherically corrected)
-- **Units:** `REFLECTANCE` (physical reflectance, 0–1 range, no arbitrary scaling)
-- **Source:** [Copernicus Data Space Sentinel Hub](https://dataspace.copernicus.eu/)
+1.  [Executive Overview](#1-executive-overview)
+2.  [Problem Statement & Motivation](#2-problem-statement--motivation)
+3.  [Complete System Architecture](#3-complete-system-architecture)
+4.  [Detailed Data Flow & Pipeline Architecture](#4-detailed-data-flow--pipeline-architecture)
+5.  [Dataset Engineering & Audit](#5-dataset-engineering--audit)
+6.  [Model Architecture Deep Dive](#6-model-architecture-deep-dive)
+7.  [Training Pipeline — Phase-by-Phase Breakdown](#7-training-pipeline--phase-by-phase-breakdown)
+8.  [Visual Leaf Analysis Engine — Computer Vision Module](#8-visual-leaf-analysis-engine--computer-vision-module)
+9.  [Five-Factor Stress Assessment Framework](#9-five-factor-stress-assessment-framework)
+10. [Backend API — Endpoint Specification](#10-backend-api--endpoint-specification)
+11. [Frontend Integration — React Dashboard Component](#11-frontend-integration--react-dashboard-component)
+12. [Model Evaluation Results & Metrics](#12-model-evaluation-results--metrics)
+13. [Inference Pipeline — Step-by-Step Walkthrough](#13-inference-pipeline--step-by-step-walkthrough)
+14. [File Structure & Module Map](#14-file-structure--module-map)
+15. [Technology Stack](#15-technology-stack)
+16. [Setup, Installation & Reproduction](#16-setup-installation--reproduction)
+17. [API Request/Response Specification](#17-api-requestresponse-specification)
+18. [Design Decisions & Engineering Rationale](#18-design-decisions--engineering-rationale)
+19. [Limitations, Known Constraints & Future Work](#19-limitations-known-constraints--future-work)
+20. [References & Acknowledgments](#20-references--acknowledgments)
 
-### NDVI Formula
+---
+
+## 1. Executive Overview
+
+The Crop Leaf Stress Detection & Analysis Module is a production-grade, end-to-end machine learning system that enables farmers, agronomists, and agricultural researchers to upload a photograph of a plant leaf and receive an instantaneous, multi-dimensional stress assessment powered entirely by real trained deep learning models and real-time computer vision analysis. Unlike simplistic single-class disease classifiers, this module performs a comprehensive **five-factor stress assessment** covering:
+
+1.  **Disease Stress** — Detection and classification of fungal, bacterial, and viral pathogens including Early Blight, Late Blight, Spotted Wilt Virus, Northern Leaf Blight, and Common Rust, with accumulated probability scoring across all disease-related classes.
+2.  **Nutrient Deficiency Stress** — Identification of specific macro and micronutrient deficiencies including Nitrogen Deficiency, Magnesium Deficiency, and Potassium Deficiency through visual symptom recognition on leaf tissue.
+3.  **Pest Damage Stress** — Recognition of insect pest damage patterns, specifically Leaf Miner tunneling damage on tomato foliage, through learned visual feature extraction from training on real pest-damaged samples.
+4.  **Water Scarcity Stress** — Per-image assessment of water deficit indicators computed directly from leaf pixel color channel analysis, measuring green channel dominance ratios, brown discoloration indices, and green standard deviation to detect wilting, drying, and dehydration symptoms unique to each uploaded image.
+5.  **Heat/Thermal Stress** — Per-image assessment of heat-induced damage computed from red channel dominance, yellow discoloration indices, and overall brightness analysis to detect sun scorch, leaf curling, and thermal bleaching symptoms directly from the leaf photograph.
+
+The system currently supports two crop species — **Tomato** (8-class classification with EfficientNet-B0 transfer learning, 73.97% test accuracy) and **Maize** (3-class classification with custom CNN, 83.08% test accuracy). Both models were trained on real agricultural image datasets, validated with held-out test sets, and evaluated with rigorous per-class precision, recall, F1-score, and confusion matrix analysis. Every single prediction displayed to the user is generated by real model inference — there are absolutely no hardcoded outputs, no random number generators, no dummy confidence values, and no fake data anywhere in the pipeline.
+
+Every confidence value displayed in the frontend dashboard is computed to two decimal places and represents a genuine probability distribution from the model's softmax output layer or a genuine score from the computer vision color analysis engine.
+
+---
+
+## 2. Problem Statement & Motivation
+
+### 2.1 The Agricultural Challenge
+
+Crop diseases, nutrient deficiencies, pest infestations, water stress, and heat damage collectively account for an estimated 20-40% of global crop yield losses annually, according to the Food and Agriculture Organization of the United Nations. Smallholder farmers in developing regions are disproportionately affected because they lack access to plant pathology laboratories, soil testing facilities, and expert agronomist consultations. By the time visible symptoms become severe enough for a non-expert to identify, the window for effective intervention has often passed. Early detection at the sub-clinical stage — when leaf discoloration is subtle, when nutrient deficiency symptoms first emerge, when pest damage is in its initial phase — is the critical factor that determines whether a farmer can save a crop or suffer catastrophic losses.
+
+### 2.2 Why Multi-Factor Analysis Matters
+
+Traditional crop disease detection applications focus exclusively on a single dimension: disease classification. They ask a simple question — "Is this leaf diseased, and if so, which disease?" — and provide a single answer. This approach is fundamentally incomplete because it ignores the complex, interconnected nature of plant health. A tomato leaf showing yellowing and brown spots might be suffering from Early Blight (a fungal disease), or it might be exhibiting Nitrogen Deficiency (a nutrient problem), or it might be simultaneously experiencing water stress that is exacerbating an underlying disease condition. The farmer needs to understand all of these factors simultaneously to make the correct intervention decision. Applying fungicide to a nitrogen-deficient plant wastes money and chemicals. Increasing irrigation on a plant suffering from fungal blight can actually worsen the disease. The multi-factor approach implemented in this module addresses this critical gap by analyzing every uploaded leaf image across five independent stress dimensions simultaneously, giving the farmer a holistic picture of crop health rather than a single-axis classification.
+
+### 2.3 Why Image-Based Analysis for Water and Heat Stress
+
+Traditional approaches to measuring water stress and heat stress rely on environmental sensor data — soil moisture probes, weather station temperature readings, satellite-derived land surface temperature, and evapotranspiration models. While these approaches provide valuable regional data, they cannot capture the actual physiological state of an individual plant at the moment a farmer photographs it. A plant growing in the same field as its neighbors may experience dramatically different water stress levels depending on its root depth, soil heterogeneity, micro-topography, and canopy shading. By analyzing the actual leaf pixel data — the green channel intensity, the brown discoloration patterns, the red-to-green ratio, the overall brightness — the system captures the plant's actual physiological response to water deficit and heat exposure rather than inferring stress from proxy environmental variables. This per-image approach means that two different leaf photographs taken on the same day in the same field will produce different water and heat stress scores if the leaves themselves exhibit different visual symptoms, which is the correct behavior for a plant-level diagnostic tool.
+
+---
+
+## 3. Complete System Architecture
+
+### 3.1 High-Level Architecture Diagram
 
 ```
-NDVI = (B08 - B04) / (B08 + B04)
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    FRONTEND LAYER                                       │
+│                               (React + TypeScript + Vite)                               │
+│                                                                                         │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐   │
+│  │                         CropAnalysisPanel.tsx Component                          │   │
+│  │                                                                                  │   │
+│  │  ┌─────────────────┐  ┌──────────────────┐  ┌────────────────────────────────┐  │   │
+│  │  │  File Upload     │  │  Image Preview    │  │  Stress Assessment Dashboard  │  │   │
+│  │  │  Zone            │  │  Renderer         │  │                                │  │   │
+│  │  │                  │  │                    │  │  ┌─────────┐ ┌─────────────┐  │  │   │
+│  │  │  • JPG/JPEG      │  │  • Client-side     │  │  │ Disease │ │  Nutrient   │  │  │   │
+│  │  │  • PNG           │  │    Object URL      │  │  │ Stress  │ │  Stress     │  │  │   │
+│  │  │  • WebP          │  │  • Max 10MB        │  │  │ Bar     │ │  Bar        │  │  │   │
+│  │  │  • Max 10MB      │  │  • Aspect ratio    │  │  └─────────┘ └─────────────┘  │  │   │
+│  │  │                  │  │    preserved       │  │  ┌─────────┐ ┌─────────────┐  │  │   │
+│  │  └─────────────────┘  └──────────────────┘  │  │ Pest    │ │  Water      │  │  │   │
+│  │                                              │  │ Stress  │ │  Stress     │  │  │   │
+│  │  ┌──────────────────────────────────────┐   │  │ Bar     │ │  Bar        │  │  │   │
+│  │  │  Analyze Button                       │   │  └─────────┘ └─────────────┘  │  │   │
+│  │  │  → POST /api/ml/analyze-image         │   │  ┌─────────────────────────┐  │  │   │
+│  │  │  → FormData: file + cell_id           │   │  │ Heat Stress Bar         │  │  │   │
+│  │  └──────────────────────────────────────┘   │  └─────────────────────────┘  │  │   │
+│  │                                              └────────────────────────────────┘  │   │
+│  └──────────────────────────────────────────────────────────────────────────────────┘   │
+│                                         │                                               │
+│                                    HTTP POST                                            │
+│                              (multipart/form-data)                                      │
+└─────────────────────────────┬───────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   BACKEND API LAYER                                     │
+│                            (FastAPI + Uvicorn + Python 3.11)                            │
+│                                                                                         │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐   │
+│  │                        ml_routes.py — /api/ml/analyze-image                      │   │
+│  │                                                                                  │   │
+│  │  1. Receive UploadFile (multipart/form-data)                                     │   │
+│  │  2. Read raw bytes from file stream                                              │   │
+│  │  3. Delegate to MLService.analyze_image()                                        │   │
+│  │  4. Return JSONResponse with full prediction payload                             │   │
+│  └──────────────────┬───────────────────────────────────────────────────────────────┘   │
+│                     │                                                                   │
+│                     ▼                                                                   │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐   │
+│  │                    ml_service.py — MLService Singleton                            │   │
+│  │                                                                                  │   │
+│  │  ┌────────────────────────────────────────────────────────────────────────────┐  │   │
+│  │  │                          Validation Layer                                  │  │   │
+│  │  │                                                                            │  │   │
+│  │  │  • File size check: reject > 10MB                                          │  │   │
+│  │  │  • Extension check: only .jpg, .jpeg, .png, .webp                          │  │   │
+│  │  │  • PIL Image.open(): verify decodable image                                │  │   │
+│  │  │  • Dimension check: reject < 32×32 pixels                                  │  │   │
+│  │  │  • Brightness analysis: warn if mean < 20 (too dark) or > 240 (over)       │  │   │
+│  │  └────────────────────────────────────────────────────────────────────────────┘  │   │
+│  │                     │                                                            │   │
+│  │                     ▼                                                            │   │
+│  │  ┌────────────────────────────────────────────────────────────────────────────┐  │   │
+│  │  │                        Model Dispatch Layer                                │  │   │
+│  │  │                                                                            │  │   │
+│  │  │  Currently routes ALL images to Tomato EfficientNet-B0 model               │  │   │
+│  │  │  Maize SimpleCNN model loaded and ready for explicit crop selection         │  │   │
+│  │  └────────────────────────────────────────────────────────────────────────────┘  │   │
+│  └──────────────────┬───────────────────────────────────────────────────────────────┘   │
+│                     │                                                                   │
+│                     ▼                                                                   │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐   │
+│  │                        inference.py — Prediction Engine                          │   │
+│  │                                                                                  │   │
+│  │  ┌─────────────────────────┐    ┌──────────────────────────────────────────┐     │   │
+│  │  │  BRANCH A:              │    │  BRANCH B:                               │     │   │
+│  │  │  Deep Learning Model    │    │  Computer Vision Visual Analysis         │     │   │
+│  │  │                         │    │                                          │     │   │
+│  │  │  1. Resize to 256px     │    │  1. Resize to 224×224                    │     │   │
+│  │  │  2. CenterCrop 224px    │    │  2. Convert to numpy float32            │     │   │
+│  │  │  3. ToTensor()          │    │  3. Extract R/G/B channel means         │     │   │
+│  │  │  4. Normalize ImageNet  │    │  4. Extract R/G std deviations          │     │   │
+│  │  │  5. Unsqueeze batch     │    │  5. Compute green_ratio                 │     │   │
+│  │  │  6. Forward pass        │    │  6. Compute brown_index                 │     │   │
+│  │  │  7. Softmax probs       │    │  7. Compute red_ratio                   │     │   │
+│  │  │  8. Accumulate stress   │    │  8. Compute yellow_index                │     │   │
+│  │  │     per category        │    │  9. Compute brightness                  │     │   │
+│  │  │                         │    │  10. Score water_stress                  │     │   │
+│  │  │  OUTPUT:                │    │  11. Score heat_stress                   │     │   │
+│  │  │  • disease stress       │    │                                          │     │   │
+│  │  │  • nutrient stress      │    │  OUTPUT:                                 │     │   │
+│  │  │  • pest stress          │    │  • water stress                          │     │   │
+│  │  └─────────────────────────┘    │  • heat stress                           │     │   │
+│  │                                  └──────────────────────────────────────────┘     │   │
+│  │                                                                                  │   │
+│  │  ┌────────────────────────────────────────────────────────────────────────────┐  │   │
+│  │  │                      Merged Result Assembly                                │  │   │
+│  │  │                                                                            │  │   │
+│  │  │  {                                                                         │  │   │
+│  │  │    crop: { name, confidence, detected_condition },                         │  │   │
+│  │  │    predictions: [ {class, confidence}, ... ],                              │  │   │
+│  │  │    stress: {                                                               │  │   │
+│  │  │      disease:  { level, confidence, possible_conditions },                 │  │   │
+│  │  │      nutrient: { level, confidence, possible_conditions },                 │  │   │
+│  │  │      pest:     { level, confidence, possible_conditions },                 │  │   │
+│  │  │      water:    { level, confidence },                                      │  │   │
+│  │  │      heat:     { level, confidence }                                       │  │   │
+│  │  │    },                                                                      │  │   │
+│  │  │    visual_analysis: { green_ratio, brown_index, red_ratio, ... }           │  │   │
+│  │  │  }                                                                         │  │   │
+│  │  └────────────────────────────────────────────────────────────────────────────┘  │   │
+│  └──────────────────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- Range: −1 to +1 (physically meaningful)
-- Division by zero → `NaN` (not replaced with arbitrary values)
-- Cloud-masked pixels → `NaN`
-
-### SCL Cloud Masking
-
-Pixels with the following SCL classes are **excluded** (set to NaN):
-
-| SCL | Class | Action |
-|-----|-------|--------|
-| 0 | No data | Excluded |
-| 1 | Saturated / defective | Excluded |
-| 2 | Dark area | Excluded |
-| 3 | Cloud shadow | Excluded |
-| 7 | Unclassified | Excluded |
-| 8 | Cloud (medium probability) | Excluded |
-| 9 | Cloud (high probability) | Excluded |
-| 10 | Thin cirrus | Excluded |
-| 11 | Snow / ice | Excluded |
-| **4** | **Vegetation** | **Kept** |
-| **5** | **Bare soil** | **Kept** |
-| **6** | **Water** | **Kept** |
-
-### Copernicus DEM (Elevation)
-
-- **Preferred:** COPERNICUS_30 (30 m global DEM)
-- **Fallback:** COPERNICUS_90 (90 m) — used automatically if 30 m access is denied
-- **Slope:** Derived from DEM using `numpy.gradient` with real-world pixel spacing from the GeoTIFF geotransform (not arbitrary pixel indices)
-
----
-
-## Area of Interest (AOI)
-
-| Parameter | Value |
-|-----------|-------|
-| Location | Nashik district, Maharashtra (agricultural test area) |
-| Bounding box | `[73.9300, 20.0000, 73.9400, 20.0100]` (EPSG:4326) |
-| Approximate size | ~1.1 km × 1.1 km |
-| Grid CRS | EPSG:32643 (UTM zone 43N) |
-
-The AOI is configurable in `config/settings.py`. Replace with an actual field
-polygon when available.
-
----
-
-## Coordinate Reference System (CRS)
-
-All geospatial processing uses a **projected CRS** (UTM) for accurate
-metre-based distance calculations:
-
-- **AOI input:** EPSG:4326 (WGS84 lat/lon)
-- **Raster processing:** EPSG:32643 (UTM zone 43N) — auto-detected from AOI centroid
-- **Grid construction:** UTM (cells in metres, aligned to Sentinel-2 pixel grid)
-- **GeoJSON output:** EPSG:4326 (for compatibility with web maps)
-
-Grid cells are **not** created by dividing latitude/longitude into arbitrary
-rows and columns. They are aligned pixel-for-pixel to the Sentinel-2 10 m
-raster.
-
----
-
-## Grid Methodology
-
-1. The NDVI raster (10 m, UTM) defines the grid template
-2. Each grid cell corresponds to one Sentinel-2 pixel
-3. Elevation and slope are sampled at each cell centre via nearest-neighbor from the coarser DEM raster
-4. Cell centres and corners are reprojected to WGS84 for the GeoJSON output
-5. Cells with no valid NDVI data are marked `"valid": false` — never filled with zeros or averages
-
----
-
-## Setup
-
-### Prerequisites
-
-- Python 3.11+
-- A Sentinel Hub account on [Copernicus Data Space](https://dataspace.copernicus.eu/)
-- OAuth Client ID and Client Secret (create at the Sentinel Hub Dashboard)
-
-### Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### Configure Credentials
-
-1. Copy the template:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Edit `.env` and add your credentials:
-   ```
-   CLIENT_ID=your-sentinel-hub-client-id
-   CLIENT_SECRET=your-sentinel-hub-client-secret
-   ```
-
-3. **Never commit `.env`** — it is already in `.gitignore`.
-
-4. Verify the configuration:
-   ```bash
-   python scripts/verify_env.py
-   ```
-
----
-
-## Running the Pipeline
-
-Execute scripts in order. Each script depends on outputs from previous steps.
+### 3.2 Module Interaction Diagram
 
 ```
-Step  Script                            Purpose
-────  ──────────────────────────────    ─────────────────────────────────────
- 0    scripts/verify_env.py             Verify .env credentials load safely
- 1    scripts/01_auth_test.py           Test OAuth2 authentication
- 2    scripts/02_sentinel_catalog_test.py  Search catalog for S2 L2A scenes
- 3    scripts/03_download_sentinel.py   Download B04, B08, SCL bands
- 4    scripts/04_calculate_ndvi.py      Compute cloud-masked NDVI
- 5    scripts/05_download_dem.py        Download Copernicus DEM elevation
- 6    scripts/06_calculate_terrain.py   Compute slope from DEM
- 7    scripts/07_create_grid.py         Build grid and sample all rasters
- 8    scripts/08_validate_pipeline.py   Validate entire pipeline (no mock data)
+┌────────────────────┐     HTTP      ┌───────────────────┐     Call     ┌──────────────────┐
+│                    │   POST with   │                   │   analyze   │                  │
+│  CropAnalysis      │──────────────▶│   ml_routes.py    │────────────▶│  ml_service.py   │
+│  Panel.tsx         │   FormData    │   /api/ml/        │   _image()  │  MLService       │
+│                    │◀──────────────│   analyze-image   │◀────────────│  Singleton       │
+│  (React Component) │   JSON resp   │                   │   result    │                  │
+└────────────────────┘               └───────────────────┘             └────────┬─────────┘
+                                                                                │
+                                                                           Call │ predict
+                                                                                │ _tomato()
+                                                                                ▼
+                                                                       ┌──────────────────┐
+                                                                       │                  │
+                                                                       │  inference.py    │
+                                                                       │                  │
+                                                                       │  ┌────────────┐  │
+                                                                       │  │ EfficientNet│  │
+                                                                       │  │ B0 Model    │  │
+                                                                       │  │ (16.3MB)    │  │
+                                                                       │  └────────────┘  │
+                                                                       │  ┌────────────┐  │
+                                                                       │  │ Visual Leaf │  │
+                                                                       │  │ Analyzer    │  │
+                                                                       │  │ (CV Engine) │  │
+                                                                       │  └────────────┘  │
+                                                                       └──────────────────┘
 ```
 
-### Example
+### 3.3 Training Pipeline Architecture
 
-```bash
-python scripts/verify_env.py
-python scripts/01_auth_test.py
-python scripts/02_sentinel_catalog_test.py
-python scripts/03_download_sentinel.py
-python scripts/04_calculate_ndvi.py
-python scripts/05_download_dem.py
-python scripts/06_calculate_terrain.py
-python scripts/07_create_grid.py
-python scripts/08_validate_pipeline.py
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           TRAINING PIPELINE                                     │
+│                                                                                 │
+│  ┌───────────────┐    ┌───────────────────┐    ┌────────────────────────────┐  │
+│  │               │    │                   │    │                            │  │
+│  │  Raw Dataset  │───▶│  ImageFolder      │───▶│  Data Augmentation         │  │
+│  │               │    │  Loader           │    │                            │  │
+│  │  /train/      │    │                   │    │  • RandomResizedCrop(224)  │  │
+│  │  /val/        │    │  Discovers class  │    │  • RandomHorizontalFlip    │  │
+│  │  /test/       │    │  labels from      │    │  • RandomRotation(15°)     │  │
+│  │               │    │  subfolder names  │    │  • ColorJitter             │  │
+│  └───────────────┘    └───────────────────┘    │  • ToTensor                │  │
+│                                                 │  • Normalize(ImageNet)     │  │
+│                                                 └─────────────┬──────────────┘  │
+│                                                               │                 │
+│                                                               ▼                 │
+│  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │                     TWO-PHASE TRANSFER LEARNING                         │    │
+│  │                                                                         │    │
+│  │  ┌─────────────────────────────────┐  ┌──────────────────────────────┐ │    │
+│  │  │  PHASE 1: Feature Extraction    │  │  PHASE 2: Fine-Tuning        │ │    │
+│  │  │  Epochs 1-3                     │  │  Epochs 4-6                   │ │    │
+│  │  │                                 │  │                               │ │    │
+│  │  │  • ALL backbone frozen          │  │  • Unfreeze blocks 7 & 8      │ │    │
+│  │  │  • Only classifier trains       │  │  • Lower LR: 0.0001           │ │    │
+│  │  │  • LR: 0.001                    │  │  • ReduceLROnPlateau          │ │    │
+│  │  │  • Adam optimizer               │  │  • Adam optimizer             │ │    │
+│  │  │  • CrossEntropyLoss             │  │  • Best model checkpoint      │ │    │
+│  │  └─────────────────────────────────┘  └──────────────────────────────┘ │    │
+│  └─────────────────────────────────────────────────────────────────────────┘    │
+│                                          │                                      │
+│                                          ▼                                      │
+│  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │                          TEST EVALUATION                                │    │
+│  │                                                                         │    │
+│  │  • Load best checkpoint                                                 │    │
+│  │  • Run inference on held-out test set                                   │    │
+│  │  • Compute: Accuracy, Macro F1, Precision, Recall, F1 per class        │    │
+│  │  • Generate: 8×8 confusion matrix                                      │    │
+│  │  • Save: tomato_metrics.json, tomato_disease_efficientnet.pth           │    │
+│  └─────────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Output Files
+## 4. Detailed Data Flow & Pipeline Architecture
 
-### Raw Downloads (`data/raw/`)
+### 4.1 End-to-End Request Lifecycle
 
-| File | Description |
-|------|-------------|
-| `sentinel_b04.tif` | Sentinel-2 B04 (Red), FLOAT32 reflectance |
-| `sentinel_b08.tif` | Sentinel-2 B08 (NIR), FLOAT32 reflectance |
-| `sentinel_scl.tif` | Scene Classification Layer, UINT8 |
-| `dem.tif` | Copernicus DEM elevation, FLOAT32 (metres) |
+When a farmer clicks the "Analyze Image" button in the frontend dashboard, the following precise sequence of operations occurs across the full stack:
 
-### Processed Outputs (`data/processed/`)
+**Step 1 — Client-Side File Selection and Preview Generation.** The React `CropAnalysisPanel` component renders an HTML file input element constrained to accept only `.jpg`, `.jpeg`, `.png`, and `.webp` extensions. When the farmer selects a file from their local filesystem, the `handleFileChange` event handler fires, storing the raw `File` object in React state and simultaneously generating a client-side preview URL using `URL.createObjectURL()` for immediate visual feedback before any network request is made.
 
-| File | Description |
-|------|-------------|
-| `ndvi.tif` | Cloud-masked NDVI, FLOAT32, NaN = nodata |
-| `slope.tif` | Slope in degrees, FLOAT32 |
-| `grid.json` | **★ Final output** — per-cell measurements |
-| `grid.geojson` | Same data as GeoJSON with polygon geometry |
-| `scene_metadata.json` | All catalog search results |
-| `selected_scene.json` | Selected scene provenance |
-| `dem_metadata.json` | DEM source, fallback status, stats |
-| `ndvi_statistics.json` | NDVI distribution statistics |
-| `terrain_statistics.json` | Elevation and slope statistics |
-| `ndvi_preview.png` | NDVI visualization (preview only) |
-| `dem_preview.png` | Elevation visualization (preview only) |
-| `slope_preview.png` | Slope visualization (preview only) |
+**Step 2 — HTTP POST with Multipart Form Data.** When the farmer clicks the green "Analyze Image" button, the `handleAnalyze` async function constructs a `FormData` object containing the raw image file under the key `file` and an optional `cell_id` parameter linking the analysis to a specific grid cell on the 3D map. This FormData is sent as an HTTP POST request to `http://localhost:8000/api/ml/analyze-image` with the `Content-Type: multipart/form-data` header automatically set by the browser's Fetch API.
 
-### grid.json Structure
+**Step 3 — FastAPI Request Handling and Byte Extraction.** The FastAPI router in `ml_routes.py` receives the request through the `analyze_image` endpoint, which declares `file: UploadFile = File(...)` as a parameter. FastAPI's built-in multipart parser reads the file stream into memory using `await file.read()`, producing a `bytes` object containing the raw image binary data.
+
+**Step 4 — Image Validation Pipeline.** The `MLService.analyze_image()` method receives the raw bytes and the original filename. It performs a five-stage validation pipeline: (a) file size check — images larger than 10 megabytes are rejected to prevent memory exhaustion attacks; (b) file extension verification — only `.jpg`, `.jpeg`, `.png`, and `.webp` are permitted; (c) PIL Image decoding — the bytes are passed to `PIL.Image.open()` wrapped in a `BytesIO` stream, which verifies the file contains a valid, decodable image regardless of the file extension; (d) dimension validation — images smaller than 32×32 pixels are rejected as too small for meaningful analysis; (e) brightness analysis — `PIL.ImageStat` computes the mean brightness across all channels, and images with mean brightness below 20 (severely underexposed) or above 240 (severely overexposed) receive quality warnings that are propagated to the response.
+
+**Step 5 — Model Inference via Predict Function.** After validation, the service delegates to `predict_tomato()` from `inference.py`. The function receives the PIL Image object, the pre-loaded model, the pre-loaded transform pipeline, and the class index-to-name mapping dictionary.
+
+**Step 6 — Image Preprocessing for Neural Network.** The transform pipeline applies: (a) `Resize(256)` — scales the shorter edge to 256 pixels while preserving aspect ratio; (b) `CenterCrop(224)` — extracts a 224×224 pixel center crop, matching EfficientNet-B0's expected input dimensions; (c) `ToTensor()` — converts PIL Image (0-255 uint8 HWC) to PyTorch tensor (0.0-1.0 float32 CHW); (d) `Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])` — applies ImageNet channel-wise normalization. The resulting tensor is unsqueezed to add a batch dimension of 1.
+
+**Step 7 — Forward Pass Through EfficientNet-B0.** Inside a `torch.no_grad()` context (disabling gradient computation for inference efficiency), the preprocessed tensor is passed through the EfficientNet-B0 model. The model's feature extraction backbone processes the input through its Mobile Inverted Bottleneck Convolution (MBConv) blocks, producing a 1280-dimensional feature vector per image. The custom classifier head then projects this feature vector through a fully connected layer to produce 8 raw logit scores, one per tomato class.
+
+**Step 8 — Softmax Probability Distribution.** The raw logits are passed through `F.softmax(outputs, dim=1)` to convert them into a valid probability distribution where all 8 values sum to exactly 1.0. These probabilities represent the model's calibrated confidence that the input image belongs to each of the 8 learned classes.
+
+**Step 9 — Multi-Category Stress Accumulation.** Rather than simply reporting the single highest-probability class, the system accumulates probabilities across stress categories. All disease-related class probabilities (Early Blight + Late Blight + Spotted Wilt Virus) are summed to produce a single disease stress score. All nutrient deficiency class probabilities (Nitrogen Deficiency + Magnesium Deficiency + Potassium Deficiency) are summed to produce a single nutrient stress score. Pest damage class probabilities (Leaf Miner) are accumulated into a pest stress score. This accumulation approach means that even when no single disease class has a dominant probability, the combined disease signal can still register as meaningful stress when the model distributes probability across multiple disease classes.
+
+**Step 10 — Visual Analysis Engine Execution.** Simultaneously, the original PIL Image is passed to `_analyze_leaf_visual()`, which operates entirely independently from the neural network. This function resizes the image to 224×224, converts it to a NumPy float32 array, and computes eight raw color metrics from the pixel data: R/G/B channel means, R/G standard deviations, green dominance ratio, brown discoloration index, red dominance ratio, yellow discoloration index, and overall brightness. These metrics are processed through a rule-based scoring system (detailed in Section 8) to produce per-image water stress and heat stress scores.
+
+**Step 11 — Response Assembly and Serialization.** All five stress scores (disease, nutrient, pest, water, heat) are assembled into a unified JSON response object along with the full prediction array, the detected crop name, the top confidence value, the detected condition label, and the visual analysis debug metrics. Every floating-point value is rounded to 4 significant decimal places using the `_round2()` utility function before serialization.
+
+**Step 12 — Frontend Rendering.** The React component receives the JSON response, stores it in local state, and iterates over the `result.stress` object using `Object.entries()`. Each stress factor is rendered by the `renderStressLevel()` function, which maps the stress level string ("NONE", "LOW", "MODERATE", "HIGH") to a color-coded visual indicator and renders an animated progress bar whose width is set to the actual confidence percentage value. All confidence percentages are displayed using `.toFixed(2)` for consistent two-decimal-place formatting.
+
+---
+
+## 5. Dataset Engineering & Audit
+
+### 5.1 Tomato Disease Dataset (Tomato-Village)
+
+The Tomato model was trained on the **Tomato-Village Variant-A (Multiclass Classification)** dataset, which is a curated agricultural image dataset organized into train/val/test splits using the PyTorch `ImageFolder` convention where each subdirectory name represents a class label.
+
+**Dataset Structure:**
+
+```
+Tomato-Village-main/
+└── Variant-a(Multiclass Classification)/
+    ├── train/
+    │   ├── Early_blight/           (training images of early blight symptoms)
+    │   ├── Healthy/                (training images of healthy tomato leaves)
+    │   ├── Late_blight/            (training images of late blight symptoms)
+    │   ├── Leaf Miner/             (training images of leaf miner damage)
+    │   ├── Magnesium Deficiency/   (training images of Mg deficiency)
+    │   ├── Nitrogen Deficiency/    (training images of N deficiency)
+    │   ├── Pottassium Deficiency/  (training images of K deficiency)
+    │   └── Spotted Wilt Virus/     (training images of TSWV symptoms)
+    ├── val/
+    │   └── (same 8 subdirectories)
+    └── test/
+        └── (same 8 subdirectories)
+```
+
+**Complete Class Taxonomy (8 Classes):**
+
+| Class Index | Class Name             | Stress Category   | Description |
+|:-----------:|:-----------------------|:-------------------|:------------|
+| 0           | Early_blight           | Disease            | Fungal disease caused by *Alternaria solani*, characterized by concentric ring lesions on lower leaves |
+| 1           | Healthy                | None               | Normal, healthy tomato foliage with no visible stress symptoms |
+| 2           | Late_blight            | Disease            | Oomycete disease caused by *Phytophthora infestans*, causing water-soaked lesions and rapid tissue death |
+| 3           | Leaf Miner             | Pest               | Insect damage from *Liriomyza* species larvae tunneling through leaf mesophyll tissue |
+| 4           | Magnesium Deficiency   | Nutrient           | Interveinal chlorosis on older leaves due to insufficient Mg uptake |
+| 5           | Nitrogen Deficiency    | Nutrient           | General yellowing (chlorosis) starting from older leaves due to insufficient N |
+| 6           | Pottassium Deficiency  | Nutrient           | Marginal leaf scorch and browning of leaf edges due to insufficient K |
+| 7           | Spotted Wilt Virus     | Disease            | Viral disease caused by TSWV, transmitted by thrips, causing bronze ring spots |
+
+**Class-to-Index Mapping (as stored in `tomato_classes.json`):**
 
 ```json
 {
-  "metadata": {
-    "aoi_bbox_4326": [73.93, 20.0, 73.94, 20.01],
-    "crs": "EPSG:32643",
-    "sentinel2_scene_id": "S2C_MSIL2A_...",
-    "sentinel2_datetime": "2026-06-02T05:43:25.241Z",
-    "dem_source": "COPERNICUS_90",
-    "total_cells": 11550,
-    "valid_cells": 11550
-  },
-  "cells": [
-    {
-      "cell_id": "R000_C000",
-      "row": 0,
-      "col": 0,
-      "center_lat": 20.0098946,
-      "center_lon": 73.9299811,
-      "valid": true,
-      "ndvi_mean": 0.505537,
-      "elevation_m": 553.21,
-      "slope_deg": 0.542,
-      "low_vegetation_index": false
+    "Early_blight": 0,
+    "Healthy": 1,
+    "Late_blight": 2,
+    "Leaf Miner": 3,
+    "Magnesium Deficiency": 4,
+    "Nitrogen Deficiency": 5,
+    "Pottassium Deficiency": 6,
+    "Spotted Wilt Virus": 7
+}
+```
+
+**Total Training Samples:** 3,168 images across 8 classes, loaded via `DataLoader` with batch size 16, yielding 198 training batches per epoch.
+
+**Total Validation Samples:** 907 images, yielding 57 validation batches.
+
+**Total Test Samples:** 455 images, yielding 29 test batches.
+
+### 5.2 Maize Leaf Disease Dataset
+
+The Maize model was trained on a preprocessed NumPy array dataset containing 48×48 pixel RGB images stored as `.npy` files.
+
+**Dataset Files:**
+
+```
+MaizeLeaf_dataset/
+├── trainData.npy      (training images array)
+├── trainLabel.npy     (training labels array)
+├── valData.npy        (validation images array)
+├── valLabel.npy       (validation labels array)
+├── testData.npy       (test images array)
+└── testLabel.npy      (test labels array)
+```
+
+**Complete Class Taxonomy (3 Classes):**
+
+| Class Index | Class Name              | Description |
+|:-----------:|:------------------------|:------------|
+| 0           | Healthy                 | Normal, healthy maize leaf tissue |
+| 1           | Northern_Leaf_Blight    | Fungal disease caused by *Exserohilum turcicum*, producing cigar-shaped gray-green lesions |
+| 2           | Common_Rust             | Fungal disease caused by *Puccinia sorghi*, producing small circular reddish-brown pustules |
+
+**Image Specifications:** 48×48 pixels, 3 channels (RGB), float32 normalized values.
+
+---
+
+## 6. Model Architecture Deep Dive
+
+### 6.1 Tomato Model — EfficientNet-B0 with Transfer Learning
+
+The Tomato disease classifier is built on top of **EfficientNet-B0**, a compound-scaled convolutional neural network architecture that was designed by Google Brain using neural architecture search (NAS) to simultaneously optimize network depth, width, and resolution scaling. EfficientNet-B0 serves as the baseline model in the EfficientNet family and offers an excellent trade-off between parameter count (approximately 5.3 million parameters), computational cost (approximately 0.39 billion FLOPs), and classification accuracy. The model was originally pre-trained on the ImageNet-1K dataset (1.28 million training images across 1,000 object categories), giving it a rich set of learned visual features including edge detectors, texture analyzers, shape recognizers, and hierarchical object part detectors that transfer effectively to agricultural leaf classification tasks.
+
+**Architecture Modifications for Tomato Classification:**
+
+The pre-trained EfficientNet-B0 backbone is loaded with its ImageNet weights intact. The original classifier head, which is a single fully connected layer mapping 1,280 features to 1,000 ImageNet classes, is replaced with a custom fully connected layer mapping 1,280 features to 8 tomato classes:
+
+```python
+model = models.efficientnet_b0(pretrained=True)
+num_ftrs = model.classifier[1].in_features  # 1280
+model.classifier[1] = nn.Linear(num_ftrs, 8)  # 8 tomato classes
+```
+
+**Parameter Summary:**
+
+| Component | Parameters | Trainable (Phase 1) | Trainable (Phase 2) |
+|:----------|:-----------|:---------------------|:---------------------|
+| Features Blocks 0-6 | ~3.8M | ❌ Frozen | ❌ Frozen |
+| Features Blocks 7-8 | ~1.2M | ❌ Frozen | ✅ Unfrozen |
+| Classifier Head | ~10.2K | ✅ Trainable | ✅ Trainable |
+| **Total** | **~5.3M** | **~10.2K trainable** | **~1.21M trainable** |
+
+### 6.2 Maize Model — Custom 3-Layer CNN (SimpleCNNFixed)
+
+The Maize leaf classifier uses a custom-designed lightweight convolutional neural network optimized for the small 48×48 pixel input images in the MaizeLeaf dataset. The architecture consists of three convolutional blocks followed by a two-layer fully connected classifier:
+
+```
+Input: [batch, 3, 48, 48]
+         │
+         ▼
+┌─────────────────────────────┐
+│  Layer 1:                   │
+│  Conv2d(3→32, 3×3, pad=1)  │
+│  BatchNorm2d(32)            │
+│  ReLU                       │
+│  MaxPool2d(2)               │
+│  Output: [batch, 32, 24, 24]│
+└─────────────┬───────────────┘
+              │
+              ▼
+┌─────────────────────────────┐
+│  Layer 2:                   │
+│  Conv2d(32→64, 3×3, pad=1) │
+│  BatchNorm2d(64)            │
+│  ReLU                       │
+│  MaxPool2d(2)               │
+│  Output: [batch, 64, 12, 12]│
+└─────────────┬───────────────┘
+              │
+              ▼
+┌─────────────────────────────┐
+│  Layer 3:                   │
+│  Conv2d(64→128, 3×3, pad=1)│
+│  BatchNorm2d(128)           │
+│  ReLU                       │
+│  AdaptiveMaxPool2d((1,1))   │
+│  Output: [batch, 128, 1, 1] │
+└─────────────┬───────────────┘
+              │
+              ▼
+┌─────────────────────────────┐
+│  Classifier:                │
+│  Flatten → [batch, 128]     │
+│  Linear(128 → 64)           │
+│  ReLU                       │
+│  Dropout(0.3)               │
+│  Linear(64 → 3)             │
+│  Output: [batch, 3]         │
+└─────────────────────────────┘
+```
+
+**Total Parameters:** Approximately 120,000 (0.12M) — a deliberately compact architecture suitable for the small dataset and small input resolution.
+
+---
+
+## 7. Training Pipeline — Phase-by-Phase Breakdown
+
+### 7.1 Tomato Model Training Strategy
+
+The Tomato model employs a **two-phase transfer learning strategy** that is a well-established best practice in deep learning for small-to-medium agricultural datasets:
+
+**Phase 1 — Feature Extraction (Epochs 1-3):**
+
+In this phase, the entire EfficientNet-B0 feature extraction backbone (all convolutional layers, all batch normalization layers, all activation functions) is completely frozen. Only the final classification head — a single linear layer with 1,280 input features and 8 output neurons — is trainable. This means that during Phase 1, the model learns how to map the pre-trained ImageNet features to the 8 tomato disease classes without altering any of the learned visual feature detectors. The optimizer is Adam with an initial learning rate of 0.001, and a `ReduceLROnPlateau` scheduler monitors validation accuracy and reduces the learning rate by a factor of 10 when accuracy plateaus for more than 1 epoch.
+
+The rationale for this phase is that the ImageNet-pretrained features already contain excellent low-level visual detectors (edges, textures, colors) and mid-level features (object parts, patterns) that are highly transferable to leaf disease recognition. By keeping these features frozen initially, we prevent catastrophic forgetting of these learned representations and allow the classifier head to learn a stable mapping from features to classes.
+
+**Phase 2 — Fine-Tuning (Epochs 4-6):**
+
+After the classifier head has converged to a reasonable mapping, the last two blocks of the EfficientNet backbone (blocks 7 and 8) are unfrozen and made trainable. These are the deepest, most task-specific feature layers — they learn to detect the high-level visual patterns that are most relevant to distinguishing between the 8 tomato classes. The learning rate is reduced to 0.0001 (10× lower than Phase 1) to make small, careful adjustments to the pre-trained weights without destroying the learned low-level features. A new `ReduceLROnPlateau` scheduler is created for this phase.
+
+**Training Hyperparameters Summary:**
+
+| Parameter | Phase 1 | Phase 2 |
+|:----------|:--------|:--------|
+| Epochs | 1-3 | 4-6 |
+| Optimizer | Adam | Adam |
+| Learning Rate | 0.001 | 0.0001 |
+| LR Scheduler | ReduceLROnPlateau (patience=1, factor=0.1) | ReduceLROnPlateau (patience=1, factor=0.1) |
+| Loss Function | CrossEntropyLoss | CrossEntropyLoss |
+| Batch Size | 16 | 16 |
+| Trainable Params | ~10.2K (classifier only) | ~1.21M (blocks 7-8 + classifier) |
+| Backbone Frozen | Completely | Blocks 0-6 only |
+
+**Data Augmentation (Training Set Only):**
+
+| Augmentation | Parameters | Purpose |
+|:-------------|:-----------|:--------|
+| RandomResizedCrop | Output 224×224 | Scale and position invariance |
+| RandomHorizontalFlip | p=0.5 | Mirror invariance |
+| RandomRotation | ±15 degrees | Rotation invariance |
+| ColorJitter | Default | Lighting condition robustness |
+| Normalize | mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225] | ImageNet standardization |
+
+**Validation/Test Preprocessing (No Augmentation):**
+
+| Transform | Parameters | Purpose |
+|:----------|:-----------|:--------|
+| Resize | 256 pixels (shorter edge) | Standardize input scale |
+| CenterCrop | 224×224 pixels | Deterministic crop for reproducibility |
+| Normalize | ImageNet mean/std | Consistent with training normalization |
+
+### 7.2 Maize Model Training Strategy
+
+The Maize model is trained from scratch (no transfer learning) using a standard supervised training loop with Adam optimizer, CrossEntropyLoss, and batch size 64 over 2 epochs. The small 48×48 input size makes transfer learning from ImageNet architectures (which expect 224×224 inputs) less effective, so a custom lightweight CNN was designed specifically for this input resolution.
+
+---
+
+## 8. Visual Leaf Analysis Engine — Computer Vision Module
+
+### 8.1 Overview and Design Philosophy
+
+The Visual Leaf Analysis Engine is a **rule-based computer vision module** that operates entirely independently from the deep learning classification models. While the neural network detects diseases, nutrient deficiencies, and pest damage through learned pattern recognition, the Visual Leaf Analysis Engine assesses water stress and heat stress through direct pixel color analysis. This design separation is intentional — water stress and heat stress manifest as broad, continuous changes in leaf coloration (progressive browning, yellowing, bleaching) rather than as discrete, localizable lesion patterns, making them better suited to statistical color analysis than to convolutional pattern matching.
+
+The engine computes **eight raw color metrics** from every uploaded leaf image and passes them through a calibrated rule-based scoring system to produce independent water stress and heat stress scores between 0.0 and 1.0.
+
+### 8.2 Color Metric Definitions
+
+**Metric 1 — Green Dominance Ratio (green_ratio):**
+
+```
+green_ratio = G_mean / (R_mean + G_mean + B_mean + ε)
+```
+
+This metric measures the proportion of the total color signal contributed by the green channel. Healthy, photosynthetically active leaves have a high green dominance ratio (typically 0.38-0.42) because chlorophyll strongly absorbs red and blue light while reflecting green light. Water-stressed leaves lose chlorophyll as cells dehydrate, causing the green ratio to drop below 0.33. Values below 0.30 indicate severe desiccation.
+
+**Metric 2 — Brown Discoloration Index (brown_index):**
+
+```
+brown_index = (R_mean - G_mean) / (R_mean + G_mean + ε)
+```
+
+This metric measures the degree to which the leaf has shifted from green toward brown. Healthy leaves have a negative brown index (green exceeds red). As leaves dry out, senesce, or develop necrotic tissue, the brown index rises above zero. Values above 0.05 indicate moderate browning, and values above 0.10 indicate substantial necrotic or desiccated tissue.
+
+**Metric 3 — Green Standard Deviation (g_std):**
+
+```
+g_std = standard_deviation(G_channel_pixels)
+```
+
+This metric measures the variability of green intensity across the leaf surface. A healthy leaf with mixed green and non-green regions (veins, highlights) has a moderate-to-high green standard deviation (typically 45-65). A uniformly brown, desiccated leaf has very low green standard deviation (below 30) because all pixels have converged to similar brownish tones. This metric helps distinguish between localized disease spots (which maintain high green variance between healthy and diseased tissue) and uniform water stress (which produces a globally consistent color shift).
+
+**Metric 4 — Red Dominance Ratio (red_ratio):**
+
+```
+red_ratio = R_mean / (R_mean + G_mean + B_mean + ε)
+```
+
+This metric measures the proportion of total color signal in the red channel. Heat-scorched leaves develop elevated red channel values (typically 0.38-0.45) as chlorophyll degrades and carotenoid and anthocyanin pigments become visible. Values above 0.42 indicate severe thermal damage.
+
+**Metric 5 — Yellow Discoloration Index (yellow_index):**
+
+```
+yellow_index = ((R_mean + G_mean) / 2 - B_mean) / (R_mean + G_mean + B_mean + ε)
+```
+
+This metric measures the degree to which the leaf has shifted toward yellow tones. Yellow results from high red AND high green with low blue — this is the characteristic color of heat-stressed leaves where chlorophyll is degrading unevenly. A healthy green leaf has a moderate yellow index (0.08-0.15). Heat-stressed leaves push the yellow index above 0.18.
+
+**Metric 6 — Overall Brightness:**
+
+```
+brightness = (R_mean + G_mean + B_mean) / 3
+```
+
+Very bright pixels (brightness > 160-180) can indicate sun-bleached, photodamaged tissue where pigments have been destroyed by excessive solar radiation and heat exposure.
+
+### 8.3 Scoring Algorithm
+
+**Water Stress Score Computation:**
+
+| Condition | Score Added | Rationale |
+|:----------|:-----------|:----------|
+| green_ratio < 0.30 | +0.40 | Severe chlorophyll loss from dehydration |
+| green_ratio < 0.34 | +0.25 | Moderate chlorophyll loss |
+| green_ratio < 0.37 | +0.10 | Mild chlorophyll reduction |
+| brown_index > 0.10 | +0.35 | Substantial necrotic/desiccated tissue |
+| brown_index > 0.05 | +0.20 | Moderate browning |
+| brown_index > 0.00 | +0.08 | Slight discoloration |
+| g_std < 30 | +0.15 | Uniform browning (global desiccation) |
+| g_std < 45 | +0.05 | Reduced green variability |
+
+Final score = min(sum of applicable scores, 1.0)
+
+**Heat Stress Score Computation:**
+
+| Condition | Score Added | Rationale |
+|:----------|:-----------|:----------|
+| red_ratio > 0.42 | +0.35 | Severe red channel dominance from pigment breakdown |
+| red_ratio > 0.38 | +0.20 | Moderate red shift |
+| red_ratio > 0.35 | +0.08 | Mild red elevation |
+| yellow_index > 0.25 | +0.30 | Severe yellowing from heat degradation |
+| yellow_index > 0.18 | +0.15 | Moderate yellowing |
+| yellow_index > 0.12 | +0.05 | Mild yellow shift |
+| brightness > 180 | +0.15 | Sun-bleached tissue |
+| brightness > 160 | +0.05 | Elevated brightness |
+
+Final score = min(sum of applicable scores, 1.0)
+
+### 8.4 Stress Level Classification
+
+All five stress factors (disease, nutrient, pest, water, heat) are classified into four severity levels using the same threshold function:
+
+| Confidence Score | Stress Level | Color Code | Interpretation |
+|:-----------------|:-------------|:-----------|:---------------|
+| ≥ 0.70 | **HIGH** | 🟠 Orange (#f97316) | Immediate attention required |
+| ≥ 0.40 | **MODERATE** | 🟡 Amber (#fbbf24) | Monitor closely, consider intervention |
+| ≥ 0.15 | **LOW** | 🟢 Green (#34d399) | Minor indicator present, no immediate action |
+| < 0.15 | **NONE** | ⚪ Gray (#94a3b8) | No significant stress detected |
+
+---
+
+## 9. Five-Factor Stress Assessment Framework
+
+### 9.1 Factor 1 — Disease Stress
+
+**Data Source:** Deep learning model softmax probabilities
+
+**Computation Method:** The system sums the softmax probabilities of ALL disease-related classes in the model's output. For the Tomato model, disease classes are Early Blight, Late Blight, and Spotted Wilt Virus. For the Maize model, disease classes are Northern Leaf Blight and Common Rust. By summing rather than taking the maximum, the system captures the total "disease signal" even when the model is uncertain about which specific disease is present but is confident that some disease exists.
+
+**Example:** If the model outputs Early_Blight=0.25, Late_Blight=0.20, Spotted_Wilt_Virus=0.05, then disease_stress = 0.50 (MODERATE), even though no single disease class exceeded 0.25. This accumulated signal is far more informative than reporting a single 25% confidence for Early Blight.
+
+**Possible Conditions Reporting:** The response includes a `possible_conditions` array listing all disease classes with individual confidence above 5% (0.05 threshold), giving the farmer specific disease names to research or discuss with an agronomist.
+
+### 9.2 Factor 2 — Nutrient Deficiency Stress
+
+**Data Source:** Deep learning model softmax probabilities
+
+**Computation Method:** Same accumulation approach as disease stress, summing probabilities of Nitrogen Deficiency, Magnesium Deficiency, and Potassium Deficiency classes.
+
+**Agricultural Significance:** Nutrient deficiencies are the most actionable stress factor for farmers because they can be directly addressed through targeted fertilizer application. Nitrogen deficiency causes general chlorosis starting from older leaves. Magnesium deficiency causes interveinal chlorosis (yellowing between veins while veins remain green). Potassium deficiency causes marginal leaf scorch (browning at leaf edges). Each deficiency has a specific fertilizer remedy, making accurate classification highly valuable for prescriptive agriculture.
+
+### 9.3 Factor 3 — Pest Damage Stress
+
+**Data Source:** Deep learning model softmax probabilities
+
+**Computation Method:** Accumulation of all pest-related class probabilities. Currently, the Tomato model has one pest class (Leaf Miner). The Maize model does not have pest-specific classes in its training data.
+
+**Agricultural Significance:** Pest damage often requires fundamentally different interventions than disease or nutrient problems — insecticides rather than fungicides, physical barriers rather than soil amendments. Separating pest stress from disease stress prevents the common farmer error of applying fungicide to pest damage or vice versa.
+
+### 9.4 Factor 4 — Water Scarcity Stress
+
+**Data Source:** Computer vision pixel color analysis (NOT the deep learning model)
+
+**Computation Method:** Rule-based scoring from green_ratio, brown_index, and g_std metrics (see Section 8.3)
+
+**Per-Image Variability:** Because this factor is computed from the actual pixel content of each uploaded image, different leaf photographs will produce different water stress scores even when taken on the same day. A leaf from a well-irrigated row will show higher green_ratio and lower brown_index than a leaf from a dry section of the same field. This per-image variability is a deliberate design feature — it captures plant-level water status rather than field-level averages.
+
+### 9.5 Factor 5 — Heat/Thermal Stress
+
+**Data Source:** Computer vision pixel color analysis (NOT the deep learning model)
+
+**Computation Method:** Rule-based scoring from red_ratio, yellow_index, and brightness metrics (see Section 8.3)
+
+**Per-Image Variability:** Like water stress, heat stress is computed per-image from actual pixel data. A sun-exposed leaf will show higher red_ratio and yellow_index than a shaded leaf from the same plant. This captures the actual thermal damage visible on the specific leaf being analyzed rather than inferring stress from ambient temperature data.
+
+---
+
+## 10. Backend API — Endpoint Specification
+
+### 10.1 POST /api/ml/analyze-image
+
+**Purpose:** Upload a crop leaf image and receive a complete multi-factor stress analysis.
+
+**Request Format:** `multipart/form-data`
+
+| Field | Type | Required | Description |
+|:------|:-----|:---------|:------------|
+| file | File | ✅ Yes | Image file (.jpg, .jpeg, .png, .webp), max 10MB |
+| cell_id | String | ❌ No | Optional grid cell ID to link analysis to map location |
+
+**Response Format:** `application/json`
+
+**Success Response (200):** Full prediction payload (see Section 17 for complete schema).
+
+**Error Responses:**
+
+| Status | Condition | Response Body |
+|:-------|:----------|:-------------|
+| 400 | Image too large (>10MB) | `{"detail": "Image too large. Maximum 10MB."}` |
+| 400 | Invalid file type | `{"detail": "Invalid image type. Supported: jpg, jpeg, png, webp."}` |
+| 400 | Corrupt/unreadable image | `{"detail": "Cannot open image: [error details]"}` |
+| 400 | Image too small (<32×32) | `{"detail": "Image too small. Minimum 32×32 pixels."}` |
+| 400 | Models not loaded | `{"detail": "ML models are not loaded yet. Please train models first."}` |
+| 500 | Internal server error | `{"detail": "[exception message]"}` |
+
+### 10.2 GET /api/ml/model-status
+
+**Purpose:** Check whether ML models are loaded and retrieve training metrics.
+
+**Response:** JSON object containing load status and full training metrics including per-class precision, recall, F1, and confusion matrix for both Tomato and Maize models.
+
+### 10.3 GET /api/ml/model-metrics
+
+**Purpose:** Retrieve detailed model evaluation metrics.
+
+---
+
+## 11. Frontend Integration — React Dashboard Component
+
+### 11.1 CropAnalysisPanel Component
+
+The `CropAnalysisPanel` is a self-contained React functional component that manages the complete user interaction flow for leaf image analysis. It is implemented in `frontend/src/components/CropAnalysisPanel.tsx` using TypeScript and integrates into the existing side panel of the 3D agricultural visualization dashboard without modifying any Part A components.
+
+**Component State Management:**
+
+| State Variable | Type | Purpose |
+|:---------------|:-----|:--------|
+| `expanded` | boolean | Controls panel open/close accordion state |
+| `file` | File \| null | Stores the selected image file object |
+| `previewUrl` | string \| null | Client-side Object URL for image preview |
+| `loading` | boolean | Controls loading spinner during API call |
+| `error` | string \| null | Stores error messages for display |
+| `result` | ImageAnalysisResult \| null | Stores the complete API response |
+
+**Visual Design:**
+
+The stress assessment dashboard uses a dark theme consistent with the existing agricultural platform. Each stress factor is rendered as a card with a colored left border indicating severity, a stress level pill badge (NONE/LOW/MODERATE/HIGH), a confidence percentage label with two decimal places, and an animated progress bar whose width corresponds to the actual confidence value rather than a fixed level-based width.
+
+**Stress Level Color Mapping:**
+
+| Level | Bar Color | Badge Background | Badge Text |
+|:------|:----------|:-----------------|:-----------|
+| LOW | #34d399 (green) | rgba(52,211,153,0.2) | #34d399 |
+| MODERATE | #fbbf24 (amber) | rgba(251,191,36,0.2) | #fbbf24 |
+| HIGH | #f97316 (orange) | rgba(249,115,22,0.2) | #f97316 |
+| CRITICAL | #ef4444 (red) | rgba(239,68,68,0.2) | #ef4444 |
+
+---
+
+## 12. Model Evaluation Results & Metrics
+
+### 12.1 Tomato Model — Full Test Set Evaluation
+
+**Overall Metrics:**
+
+| Metric | Value |
+|:-------|:------|
+| **Test Accuracy** | **73.97%** |
+| **Macro F1-Score** | **67.06%** |
+| Total Test Images | 455 |
+| Number of Classes | 8 |
+| Model Architecture | EfficientNet-B0 |
+| Model File Size | 16.37 MB |
+
+**Per-Class Detailed Metrics:**
+
+| Class | Precision | Recall | F1-Score | Support |
+|:------|:----------|:-------|:---------|:--------|
+| Early Blight | 78.38% | 58.00% | 66.67% | 50 |
+| Healthy | 63.16% | 54.55% | 58.54% | 22 |
+| Late Blight | 85.29% | 63.04% | 72.50% | 92 |
+| Leaf Miner | 76.42% | 90.38% | 82.82% | 104 |
+| Magnesium Deficiency | 82.80% | 81.05% | 81.91% | 95 |
+| Nitrogen Deficiency | 67.35% | 89.19% | 76.74% | 37 |
+| Potassium Deficiency | 37.50% | 37.50% | 37.50% | 8 |
+| Spotted Wilt Virus | 54.69% | 66.04% | 59.83% | 53 |
+
+**Best Performing Classes:** Leaf Miner (F1: 82.82%), Magnesium Deficiency (F1: 81.91%), and Nitrogen Deficiency (F1: 76.74%) — these classes have the most distinctive visual symptoms and adequate training samples.
+
+**Challenging Classes:** Potassium Deficiency (F1: 37.50%) — this class has only 8 test samples, making it statistically unreliable and likely underrepresented in training data as well. Healthy (F1: 58.54%) — healthy leaves can be visually similar to early-stage disease or mild deficiency, leading to false negatives.
+
+**Confusion Matrix (8×8):**
+
+```
+                  Predicted →
+Actual ↓    EB   He   LB   LM   MgD  ND   KD   SWV
+EB        [ 29,   1,   2,   6,   3,   0,   0,   9 ]
+Healthy   [  0,  12,   0,   9,   1,   0,   0,   0 ]
+LB        [  4,   1,  58,   2,   3,   7,   0,  17 ]
+LM        [  1,   3,   0,  94,   3,   0,   0,   3 ]
+MgD       [  2,   1,   1,   5,  77,   4,   5,   0 ]
+ND        [  0,   0,   0,   0,   4,  33,   0,   0 ]
+KD        [  0,   0,   0,   1,   2,   2,   3,   0 ]
+SWV       [  1,   1,   7,   6,   0,   3,   0,  35 ]
+```
+
+**Key Confusion Patterns:** Late Blight is sometimes confused with Spotted Wilt Virus (17 cases) — both can produce dark lesion patterns. Healthy leaves are sometimes classified as Leaf Miner (9 cases) — indicating the model may be over-sensitive to subtle markings. Early Blight is sometimes confused with Spotted Wilt Virus (9 cases) — both produce ring-like lesion patterns on leaves.
+
+### 12.2 Maize Model — Full Test Set Evaluation
+
+**Overall Metrics:**
+
+| Metric | Value |
+|:-------|:------|
+| **Test Accuracy** | **83.08%** |
+| **Macro F1-Score** | **82.66%** |
+| Number of Classes | 3 |
+| Model Architecture | SimpleCNNFixed (Custom 3-layer CNN) |
+| Model File Size | 0.42 MB |
+
+**Training History:**
+
+| Epoch | Train Loss | Val Accuracy | Val F1 |
+|:------|:-----------|:-------------|:-------|
+| 1 | 0.5423 | 64.13% | 59.79% |
+| 2 | 0.3376 | 81.17% | 80.76% |
+
+---
+
+## 13. Inference Pipeline — Step-by-Step Walkthrough
+
+### 13.1 Complete Inference Walkthrough with Example
+
+**Input:** A farmer uploads a photograph of a tomato leaf showing brown concentric ring lesions on lower leaf tissue, captured with a smartphone camera at 3024×4032 pixels, saved as `leaf_photo.jpg` (2.3MB).
+
+**Step 1 — Validation:** File size 2.3MB < 10MB ✅. Extension `.jpg` ∈ {jpg, jpeg, png, webp} ✅. PIL successfully decodes the JPEG ✅. Dimensions 3024×4032 > 32×32 ✅. Mean brightness 127.4 — normal range ✅. No warnings generated.
+
+**Step 2 — Preprocessing:** Image resized so shorter edge = 256px → 256×341. Center crop extracts 224×224 from center. ToTensor converts to [3, 224, 224] float32. ImageNet normalization applied.
+
+**Step 3 — Forward Pass:** Tensor unsqueezed to [1, 3, 224, 224]. Passed through EfficientNet-B0 backbone (frozen blocks 0-6, fine-tuned blocks 7-8). Feature vector [1, 1280] extracted. Classifier head produces raw logits [1, 8].
+
+**Step 4 — Softmax:** Raw logits converted to probability distribution. Example output:
+
+```
+Early_blight:          0.4523  (45.23%)
+Late_blight:           0.1892  (18.92%)
+Spotted Wilt Virus:    0.1245  (12.45%)
+Leaf Miner:            0.0834  (8.34%)
+Healthy:               0.0612  (6.12%)
+Nitrogen Deficiency:   0.0423  (4.23%)
+Magnesium Deficiency:  0.0312  (3.12%)
+Potassium Deficiency:  0.0159  (1.59%)
+```
+
+**Step 5 — Stress Accumulation:**
+- Disease stress = 0.4523 + 0.1892 + 0.1245 = **0.7660** → **HIGH**
+- Pest stress = 0.0834 → **NONE** (below 0.15)
+- Nutrient stress = 0.0423 + 0.0312 + 0.0159 = **0.0894** → **NONE**
+
+**Step 6 — Visual Analysis:**
+- green_ratio = 0.3150 → water score += 0.25
+- brown_index = 0.0820 → water score += 0.20
+- g_std = 38.5 → water score += 0.05
+- Water stress = **0.50** → **MODERATE**
+- red_ratio = 0.3920 → heat score += 0.20
+- yellow_index = 0.1950 → heat score += 0.15
+- brightness = 142.0 → heat score += 0.00
+- Heat stress = **0.35** → **LOW**
+
+**Step 7 — Final Response:** Complete JSON response assembled and returned to frontend with all five stress factors, full prediction array, detected condition "Early blight", crop confidence 45.23%, and visual analysis debug metrics.
+
+---
+
+## 14. File Structure & Module Map
+
+```
+pccoe_hackathon/
+├── ml/                                    # Machine Learning Module
+│   ├── __init__.py                        # Python package initializer
+│   ├── inference.py                       # 🔬 Prediction engine (347 lines)
+│   │   ├── _round2()                      #    Precision rounding utility
+│   │   ├── _get_level()                   #    Confidence → severity level mapping
+│   │   ├── _analyze_leaf_visual()         #    Computer vision color analysis engine
+│   │   ├── load_tomato_model()            #    EfficientNet-B0 model loader
+│   │   ├── predict_tomato()               #    Tomato 8-class prediction + stress accumulation
+│   │   ├── SimpleCNNFixed                 #    Custom CNN architecture class definition
+│   │   ├── load_maize_model()             #    Custom CNN model loader
+│   │   └── predict_maize()               #    Maize 3-class prediction + stress accumulation
+│   ├── train_tomato.py                    # 🏋️ Tomato training pipeline (168 lines)
+│   │   └── train()                        #    Two-phase transfer learning with evaluation
+│   ├── train_maize.py                     # 🏋️ Maize training pipeline
+│   │   └── train()                        #    Custom CNN training loop
+│   └── models/                            # Trained model artifacts
+│       ├── tomato_disease_efficientnet.pth #    Tomato model weights (16.37 MB) [git-ignored]
+│       ├── tomato_classes.json            #    Tomato class-to-index mapping (8 classes)
+│       ├── tomato_metrics.json            #    Tomato test evaluation metrics
+│       ├── maize_leaf_cnn.pth             #    Maize model weights (0.42 MB) [git-ignored]
+│       ├── maize_classes.json             #    Maize class-to-index mapping (3 classes)
+│       └── maize_metrics.json             #    Maize test evaluation metrics
+│
+├── backend/                               # Backend API Layer
+│   ├── __init__.py
+│   ├── server.py                          # FastAPI application & Uvicorn entry point
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   └── ml_routes.py                   # 🌐 ML API endpoints (analyze-image, model-status)
+│   └── services/
+│       ├── __init__.py
+│       ├── ml_service.py                  # 🔧 MLService singleton (model loading, validation)
+│       ├── multimodal_engine.py           # 🧠 Multi-source analysis context builder
+│       ├── soil_parser.py                 # 📊 Soil report parser (PDF/CSV)
+│       └── groq_service.py               # 🤖 Groq AI assistant [DISABLED, kept for Phase C]
+│
+├── frontend/src/                          # Frontend Layer
+│   ├── components/
+│   │   ├── CropAnalysisPanel.tsx          # 📱 Image upload & stress dashboard component
+│   │   ├── AgriculturalAssistant.tsx      # 💬 AI assistant UI [disabled]
+│   │   └── SoilReportPanel.tsx            # 📋 Soil report upload component
+│   ├── services/
+│   │   ├── mlApi.ts                       # 🔗 ML API client (fetch wrapper)
+│   │   └── assistantApi.ts                # 🔗 Assistant API client [disabled]
+│   └── types.ts                           # 📝 TypeScript type definitions
+│
+├── .env                                   # Environment configuration [git-ignored]
+├── .env.example                           # Example environment template
+├── .gitignore                             # Git exclusion rules (datasets, models, .env)
+└── requirements.txt                       # Python dependencies
+```
+
+---
+
+## 15. Technology Stack
+
+### 15.1 Machine Learning & Computer Vision
+
+| Technology | Version | Purpose |
+|:-----------|:--------|:--------|
+| PyTorch | 2.x | Deep learning framework, model training and inference |
+| TorchVision | 0.x | Pre-trained EfficientNet-B0, image transforms, ImageFolder dataset |
+| Pillow (PIL) | 10.x | Image decoding, resizing, format validation |
+| NumPy | 1.x | Array operations for color channel analysis |
+| scikit-learn | 1.x | Accuracy, F1, precision, recall, confusion matrix metrics |
+
+### 15.2 Backend
+
+| Technology | Version | Purpose |
+|:-----------|:--------|:--------|
+| Python | 3.11 | Runtime language |
+| FastAPI | 0.100+ | Async web framework with automatic OpenAPI documentation |
+| Uvicorn | 0.x | ASGI server for production deployment |
+| python-multipart | 0.x | Multipart form-data parsing for file uploads |
+
+### 15.3 Frontend
+
+| Technology | Version | Purpose |
+|:-----------|:--------|:--------|
+| React | 18.x | Component-based UI framework |
+| TypeScript | 5.x | Type-safe JavaScript with interface definitions |
+| Vite | 8.x | Build tool and development server |
+| Lucide React | - | Icon library (Camera, Upload, Loader2, etc.) |
+
+---
+
+## 16. Setup, Installation & Reproduction
+
+### 16.1 Prerequisites
+
+- Python 3.11 or later
+- Node.js 18.x or later
+- pip (Python package manager)
+- npm (Node package manager)
+
+### 16.2 Backend Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/Aniket8983-arch/pccoehackathon.git
+cd pccoehackathon
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Copy environment template
+cp .env.example .env
+# Edit .env and set ENABLE_GROQ=false
+
+# Train the Tomato model (requires Tomato-Village dataset)
+python ml/train_tomato.py
+
+# Train the Maize model (requires MaizeLeaf_dataset)
+python ml/train_maize.py
+
+# Start the backend server
+python backend/server.py
+# Server runs at http://localhost:8000
+```
+
+### 16.3 Frontend Setup
+
+```bash
+cd frontend
+
+# Install Node dependencies
+npm install
+
+# Build for production
+npx vite build
+
+# The built frontend is served by FastAPI at http://localhost:8000
+```
+
+### 16.4 Testing the Pipeline
+
+1. Open `http://localhost:8000` in your browser
+2. The 3D agricultural map (Part A) loads with CesiumJS
+3. In the side panel, expand the **Crop Analysis** section
+4. Click the upload zone to select a leaf image
+5. Click **Analyze Image**
+6. View the five-factor stress assessment with real model predictions
+
+---
+
+## 17. API Request/Response Specification
+
+### 17.1 Full Response Schema
+
+```json
+{
+    "crop": {
+        "name": "Tomato",
+        "confidence": 0.7523,
+        "detected_condition": "Early blight"
+    },
+    "predictions": [
+        {"class": "Early_blight", "confidence": 0.4523},
+        {"class": "Late_blight", "confidence": 0.1892},
+        {"class": "Spotted Wilt Virus", "confidence": 0.1245},
+        {"class": "Leaf Miner", "confidence": 0.0834},
+        {"class": "Healthy", "confidence": 0.0612},
+        {"class": "Nitrogen Deficiency", "confidence": 0.0423},
+        {"class": "Magnesium Deficiency", "confidence": 0.0312},
+        {"class": "Pottassium Deficiency", "confidence": 0.0159}
+    ],
+    "stress": {
+        "disease": {
+            "level": "HIGH",
+            "confidence": 0.766,
+            "possible_conditions": ["Early blight", "Late blight", "Spotted Wilt Virus"]
+        },
+        "nutrient": {
+            "level": "NONE",
+            "confidence": 0.0894,
+            "possible_conditions": []
+        },
+        "pest": {
+            "level": "NONE",
+            "confidence": 0.0834,
+            "possible_conditions": []
+        },
+        "water": {
+            "level": "MODERATE",
+            "confidence": 0.5
+        },
+        "heat": {
+            "level": "LOW",
+            "confidence": 0.35
+        }
+    },
+    "visual_analysis": {
+        "green_ratio": 0.315,
+        "brown_index": 0.082,
+        "red_ratio": 0.392,
+        "yellow_index": 0.195,
+        "brightness": 142.0,
+        "r_mean": 148.3,
+        "g_mean": 119.2,
+        "b_mean": 108.7
+    },
+    "warnings": [],
+    "image_info": {
+        "filename": "leaf_photo.jpg",
+        "width": 3024,
+        "height": 4032
     }
-  ]
 }
 ```
 
 ---
 
-## Configuration
+## 18. Design Decisions & Engineering Rationale
 
-All configurable parameters are in `config/settings.py`:
+### 18.1 Why EfficientNet-B0 Instead of Larger Models?
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `AOI_BBOX` | `[73.93, 20.0, 73.94, 20.01]` | Bounding box [W, S, E, N] |
-| `GRID_CELL_SIZE_M` | `10` | Grid cell size (metres) |
-| `LOW_VEGETATION_NDVI_THRESHOLD` | `0.2` | Flag threshold (observation, not diagnosis) |
-| `DATE_FROM` / `DATE_TO` | 30-day window | Sentinel-2 search period |
+EfficientNet-B0 was selected because the Tomato dataset contains approximately 3,168 training images across 8 classes — an average of roughly 396 images per class. This is a small-to-medium dataset by deep learning standards. Larger models like EfficientNet-B3 (12M params), ResNet-152 (60M params), or ConvNeXt-Base (89M params) would dramatically increase the risk of overfitting on this dataset size. EfficientNet-B0's 5.3M parameters with frozen backbone training effectively reduces the problem to fitting only ~10K parameters in Phase 1, which is appropriate for this dataset size. Additionally, EfficientNet-B0 provides fast CPU inference (under 500ms per image) which is essential for a web application where farmers expect near-instant results.
 
----
+### 18.2 Why Two-Phase Training Instead of End-to-End Fine-Tuning?
 
-## Scientific Limitations
+Full end-to-end fine-tuning of all 5.3M parameters from the start would risk catastrophic forgetting of the rich visual features learned during ImageNet pre-training. The two-phase approach first establishes a reliable classifier head mapping (Phase 1) and then makes careful, low-learning-rate adjustments to the deepest backbone layers (Phase 2). This strategy consistently outperforms single-phase approaches on small agricultural datasets in published literature.
 
-1. **NDVI is not a disease detector.** Low NDVI can result from bare soil,
-   fallow fields, dry season, recent harvest, water bodies, or sensor noise.
-   A comprehensive crop health assessment requires field surveys, weather data,
-   and agronomic expertise.
+### 18.3 Why Accumulate Probabilities Instead of Reporting Top-1?
 
-2. **Single-date snapshot.** The pipeline uses the best available scene from
-   the search period. Temporal analysis (multi-date NDVI trends) would provide
-   more meaningful insights but is not yet implemented.
+A tomato leaf showing ambiguous symptoms might receive predictions like Early_Blight=0.28, Late_Blight=0.22, Spotted_Wilt_Virus=0.15. If we only report the top-1 class ("Early Blight at 28% confidence"), the farmer sees a low-confidence prediction and loses trust in the system. By accumulating all disease probabilities (0.28 + 0.22 + 0.15 = 0.65), we report "Disease Stress: MODERATE at 65.00% confidence" — which accurately reflects that the model is highly confident the leaf has SOME disease, even if it is uncertain about which specific disease. This accumulated signal is more actionable for the farmer.
 
-3. **DEM resolution.** If COPERNICUS_30 is unavailable, the pipeline falls
-   back to COPERNICUS_90 (90 m). Slope values at this resolution are smoothed
-   and may miss small-scale terrain features.
+### 18.4 Why Visual Analysis for Water/Heat Instead of Adding More Model Classes?
 
-4. **SCL accuracy.** The Scene Classification Layer is algorithmically
-   generated and may occasionally misclassify pixels (e.g., bright soil as
-   cloud). Visual inspection of the NDVI preview is recommended.
+Water stress and heat stress manifest as continuous, whole-leaf color shifts (progressive browning, yellowing, bleaching) rather than discrete, localizable patterns (spots, lesions, tunnels). Training a CNN to distinguish "water-stressed leaf" from "heat-stressed leaf" from "healthy leaf" would require large labeled datasets of water-stressed and heat-stressed leaves, which are expensive to curate and label. The rule-based color analysis approach leverages well-established plant physiology knowledge (chlorophyll degradation → green channel reduction; carotenoid exposure → red channel increase) to produce meaningful stress scores without requiring additional training data. This approach also has the advantage of being fully interpretable — the `visual_analysis` debug metrics in the response show exactly which color features contributed to the score.
 
-5. **Cloud cover during monsoon.** The Nashik AOI experiences heavy monsoon
-   cloud cover (June–September). The best available scene may still have
-   partial cloud contamination that SCL does not fully capture.
+### 18.5 Why Separate Backends for Each Stress Factor?
 
-6. **No ground truth.** The `low_vegetation_index` flag is a configurable
-   threshold-based observation. It has not been validated against field
-   measurements for this specific AOI.
+The five stress factors are computed by two fundamentally different systems (deep learning model and computer vision engine) because they measure fundamentally different phenomena. Disease, nutrient deficiency, and pest damage are categorical pattern recognition problems — the model needs to identify specific visual patterns (ring lesions, tunnel traces, interveinal chlorosis) that are characteristic of specific biological conditions. Water and heat stress are continuous physiological state variables — they represent how much a leaf's color has shifted from the healthy baseline, which is better captured by statistical color analysis than by categorical classification. Keeping these systems separate allows each to be independently improved, validated, and debugged.
 
 ---
 
-## Project Structure
+## 19. Limitations, Known Constraints & Future Work
 
-```
-Field Grid System/
-├── .env.example            # Credential template (copy to .env)
-├── .gitignore              # Excludes .env, output/, *.tif
-├── requirements.txt        # Python dependencies
-├── README.md               # This file
-├── config/
-│   ├── __init__.py
-│   └── settings.py         # AOI, endpoints, thresholds
-├── src/
-│   ├── __init__.py
-│   └── auth.py             # OAuth2 token management
-├── scripts/
-│   ├── verify_env.py       # Credential verification
-│   ├── 01_auth_test.py     # Authentication test
-│   ├── 02_sentinel_catalog_test.py
-│   ├── 03_download_sentinel.py
-│   ├── 04_calculate_ndvi.py
-│   ├── 05_download_dem.py
-│   ├── 06_calculate_terrain.py
-│   ├── 07_create_grid.py
-│   └── 08_validate_pipeline.py
-└── data/
-    ├── raw/                # Downloaded rasters (git-ignored)
-    └── processed/          # Computed outputs (git-ignored)
-```
+### 19.1 Current Limitations
+
+1. **Potassium Deficiency Recognition:** The model achieves only 37.50% F1-score on Potassium Deficiency due to limited training samples (only 8 test samples). This class needs additional training data collection.
+
+2. **Crop Auto-Detection:** The current system routes all images to the Tomato model. There is no automatic crop species detection — the farmer must know they are uploading a tomato or maize leaf. A future version could add a crop identification pre-classifier.
+
+3. **CPU-Only Inference:** The system currently runs on CPU only. While inference latency is acceptable (under 500ms per image), GPU acceleration would enable batch processing of multiple images simultaneously.
+
+4. **Single-Leaf Assumption:** The system assumes each uploaded image contains a single leaf. Images with multiple overlapping leaves, field-level canopy shots, or non-leaf plant parts (stems, fruit, flowers) may produce unreliable results.
+
+5. **Water/Heat Stress Calibration:** The color analysis thresholds for water and heat stress scoring were established through agricultural domain knowledge and manual testing rather than through data-driven optimization on labeled water/heat stress datasets. Future versions could validate these thresholds against ground-truth soil moisture and temperature sensor data.
+
+### 19.2 Future Enhancements
+
+1. **Additional Crop Species:** Extend the system to support rice, wheat, cotton, soybean, and other major crops by training additional species-specific models.
+
+2. **Severity Quantification:** Move beyond four discrete severity levels (NONE/LOW/MODERATE/HIGH) to provide continuous percentage-based severity scores with calibrated probability estimates.
+
+3. **Temporal Tracking:** Allow farmers to upload multiple images of the same plant over time and track stress progression, providing trend analysis and predictive alerts.
+
+4. **Groq AI Integration (Part C):** When re-enabled, the Groq conversational AI assistant will be able to interpret the ML analysis results in natural language, answer farmer questions about specific conditions, and provide contextualized treatment recommendations based on the combined evidence from image analysis, soil reports, and satellite data.
+
+5. **Edge Deployment:** Compile the models to ONNX or TorchScript format for deployment on edge devices (smartphones, Raspberry Pi-based field stations) enabling offline analysis without internet connectivity.
 
 ---
 
-## Security
+## 20. References & Acknowledgments
 
-- Credentials are loaded exclusively from `.env` via `python-dotenv`
-- `.env` is listed in `.gitignore` and is never committed
-- The Client Secret is never printed, logged, or included in error messages
-- OAuth access tokens are cached in memory and never written to disk
-- `verify_env.py` audits `settings.py` source code for accidental secret embedding
+### 20.1 Dataset References
+
+- **Tomato-Village Dataset:** Multiclass classification dataset for tomato leaf diseases and deficiencies, containing 8 classes with train/val/test splits.
+- **MaizeLeaf Dataset:** Preprocessed 48×48 RGB image dataset for maize leaf disease classification with 3 classes (Healthy, Northern Leaf Blight, Common Rust).
+
+### 20.2 Model Architecture References
+
+- **EfficientNet:** Tan, M., & Le, Q. (2019). EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks. ICML 2019.
+- **Transfer Learning:** Yosinski, J., et al. (2014). How transferable are features in deep neural networks? NIPS 2014.
+- **Batch Normalization:** Ioffe, S., & Szegedy, C. (2015). Batch Normalization: Accelerating Deep Network Training. ICML 2015.
+
+### 20.3 Plant Pathology References
+
+- **Early Blight:** Caused by *Alternaria solani*. Characterized by concentric ring ("target spot") lesions, typically appearing on older lower leaves first.
+- **Late Blight:** Caused by *Phytophthora infestans*. The same pathogen responsible for the Irish Potato Famine. Produces water-soaked lesions that rapidly expand and destroy tissue.
+- **Spotted Wilt Virus (TSWV):** Transmitted by thrips (especially *Frankliniella occidentalis*). Causes bronze ring spots, wilting, and stunted growth.
+- **Leaf Miner (*Liriomyza* spp.):** Larvae tunnel through leaf mesophyll tissue creating distinctive serpentine mines visible as white or pale trails.
+- **Northern Leaf Blight:** Caused by *Exserohilum turcicum*. Produces large cigar-shaped gray-green to tan lesions on maize leaves.
+- **Common Rust:** Caused by *Puccinia sorghi*. Produces small, circular to elongate, reddish-brown pustules on both leaf surfaces.
+
+### 20.4 Nutrient Deficiency References
+
+- **Nitrogen (N):** Mobile nutrient. Deficiency causes general chlorosis starting from oldest leaves. Plants appear pale green to yellow.
+- **Magnesium (Mg):** Mobile nutrient. Deficiency causes interveinal chlorosis — yellowing between veins while veins remain green. Appears on older leaves first.
+- **Potassium (K):** Mobile nutrient. Deficiency causes marginal leaf scorch — browning and curling of leaf edges. Older leaves affected first.
+
+### 20.5 Color Analysis References
+
+- **Chlorophyll and Green Reflectance:** Healthy leaf chlorophyll absorbs red (620-700nm) and blue (430-470nm) wavelengths while reflecting green (500-565nm). Loss of chlorophyll increases red and blue reflectance, reducing the green dominance ratio.
+- **Brown Discoloration and Necrosis:** Necrotic tissue loses all photosynthetic pigments, and remaining cell wall components (cellulose, lignin) produce characteristic brown coloration with elevated red channel values.
+- **Carotenoid Unmasking:** When chlorophyll degrades due to heat or senescence, yellow-orange carotenoid pigments (β-carotene, lutein, zeaxanthin) that were previously masked become visible, increasing the yellow index and red ratio.
+
+---
+
+> **Note:** Model weight files (`.pth`) and training datasets (`.npy`, image folders) are excluded from the GitHub repository via `.gitignore` to comply with storage limits. To reproduce the trained models, obtain the original datasets and run the training scripts as described in Section 16.
+
+---
+
+*This document was generated as part of the Crop Stress Detection & Field Advisory Platform — PCCOE Hackathon Project.*
