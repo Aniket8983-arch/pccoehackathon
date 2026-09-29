@@ -177,8 +177,8 @@ The LLM acts as an expert Agronomist, talking to the farmer in plain language, e
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/Aniket8983-arch/pccoehackathon.git
-cd pccoehackathon
+git clone https://github.com/Aniket8983-arch/God-s-Plan_MISC03.git
+cd God-s-Plan_MISC03
 ```
 
 ### 2. Backend Setup
