@@ -31,71 +31,66 @@ Instead of relying on single-axis diagnostics, our platform integrates **real-ti
 
 ## 🧠 Complete System Architecture
 
+Our platform employs a highly decoupled, modular microservices-inspired architecture. It separates geospatial rendering, deep learning inference, and generative AI into specialized pipelines.
+
 ```mermaid
-graph TD
-    %% Frontend Layer
-    subgraph Frontend [React + Vite + CesiumJS Dashboard]
-        UI1[3D Smart Field Map]
-        UI2[Cell Inspector]
-        UI3[Crop Image Upload]
-        UI4[Soil Report Upload]
-        UI5[AI Assistant Chat]
+flowchart TB
+    classDef frontend fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc
+    classDef backend fill:#172554,stroke:#10b981,stroke-width:2px,color:#f8fafc
+    classDef ai fill:#2e1065,stroke:#a855f7,stroke-width:2px,color:#f8fafc
+    classDef gis fill:#14532d,stroke:#f59e0b,stroke-width:2px,color:#f8fafc
+
+    subgraph Client ["🖥️ Presentation Tier (React + CesiumJS)"]
+        UI1["🗺️ 3D Map & Topography"]:::frontend
+        UI2["📸 Crop Image & Soil Upload"]:::frontend
+        UI3["💬 Conversational AI Dashboard"]:::frontend
     end
 
-    %% Backend API Layer
-    subgraph Backend [FastAPI Server]
-        R1[/api/terrain]
-        R2[/api/grid]
-        R3[/api/ml/analyze-image]
-        R4[/api/ml/analyze-soil]
-        R5[/api/assistant/chat]
+    subgraph API ["⚙️ Application Tier (FastAPI)"]
+        R1["📡 /api/terrain & /api/grid"]:::backend
+        R2["🧠 /api/ml/analyze-*"]:::backend
+        R3["🤖 /api/assistant/chat"]:::backend
     end
 
-    %% GIS & Macro Engine
-    subgraph GIS [Part A: GIS & Macro Engine]
-        DEM[(Digital Elevation Model .tif)]
-        Sat[(Sentinel-2 Imagery)]
-        NDVI[NDVI Calculator]
-        Grid[10m Resolution Grid Generator]
+    subgraph AI_ML ["🤖 Intelligence Tier (PyTorch + Groq)"]
+        DL1["🍅 Tomato EfficientNet-B0 Model"]:::ai
+        DL2["🌽 Maize Custom CNN Model"]:::ai
+        CV["👁️ CV Visual Stress Engine"]:::ai
+        OCR["📄 Soil Report Text Parser"]:::ai
+        LLM["💬 Groq Llama-3 Synthesizer"]:::ai
     end
 
-    %% ML & Micro Engine
-    subgraph ML [Part B: ML & Vision Engine]
-        DL1[EfficientNet-B0 Tomato Model]
-        DL2[Custom CNN Maize Model]
-        CV[Visual Color Analysis Engine]
-        OCR[Soil Report OCR Parser]
+    subgraph GIS ["🌍 Geospatial Tier"]
+        Sat[/"🛰️ Sentinel-2 Multispectral"/]:::gis
+        DEM[/"⛰️ Digital Elevation Model"/]:::gis
+        NDVI["📊 NDVI Grid Engine"]:::gis
     end
 
-    %% AI Layer
-    subgraph AI [Part C: Generative AI]
-        LLM[Groq Llama-3 API]
-        PromptGen[Context Synthesizer]
-    end
+    %% Network Flow
+    UI1 <-->|"REST (JSON)"| R1
+    UI2 -->|"Multipart Form"| R2
+    UI3 <-->|"REST (JSON)"| R3
 
-    %% Data Flow
-    UI1 <--> R1
-    UI2 <--> R2
-    UI3 --> R3
-    UI4 --> R4
-    UI5 <--> R5
-
-    R1 --> DEM
-    R2 --> NDVI
+    %% Backend to Subsystems
+    R1 --> DEM & NDVI
     NDVI --> Sat
-    NDVI --> Grid
 
-    R3 --> DL1
-    R3 --> DL2
-    R3 --> CV
-    R4 --> OCR
+    R2 --> DL1 & DL2 & CV & OCR
+    R3 --> LLM
 
-    R5 --> PromptGen
-    PromptGen --> LLM
-    Grid --> PromptGen
-    DL1 --> PromptGen
-    OCR --> PromptGen
+    %% LLM Context Aggregation
+    DL1 -.->|"Disease Context"| LLM
+    CV -.->|"Water/Heat Context"| LLM
+    OCR -.->|"Soil Chemistry"| LLM
+    NDVI -.->|"Macro Health"| LLM
 ```
+
+### 🏗️ Architecture Breakdown
+
+1. **Presentation Tier (Frontend):** A unified Single Page Application (SPA) built with React and Vite. It heavily utilizes **CesiumJS** to render a 3D globe with our custom topographic layers. The UI is designed with a dark, high-contrast theme optimized for field visibility.
+2. **Application Tier (Backend API):** Built on **FastAPI** to ensure high-throughput, non-blocking asynchronous request handling. It acts as the central router, securely managing multipart image uploads and querying the GIS system.
+3. **Intelligence Tier (AI/ML):** The core diagnostic engine. It uses dynamic routing to send uploaded images to the correct **PyTorch** model (EfficientNet-B0 or Custom CNN) while simultaneously running the raw pixels through a deterministic Computer Vision color-analysis pipeline. It also includes the **Groq Llama-3** integration, which acts as a "Synthesizer" to convert all ML metrics into conversational advice.
+4. **Geospatial Tier (GIS):** Responsible for parsing raw `.tif` Digital Elevation Models and live Sentinel-2 satellite data. The NDVI Grid Engine dynamically computes vegetation health indices and maps them to a localized 10m x 10m farm grid.
 
 ---
 
