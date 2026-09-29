@@ -113,9 +113,17 @@ Water runoff and nutrient pooling are heavily dictated by farm topography. By re
 
 When satellite data shows a stressed patch, the farmer can walk to that 10m grid cell and upload a photo of the affected plant leaf. 
 
-<div align="center" style="display: flex; gap: 10px; justify-content: center;">
-  <img src="assets/ml_analysis_1.png" width="400" alt="ML Analysis Output" />
-  <img src="assets/ml_analysis_2.png" width="400" alt="ML Analysis Details" />
+<div align="center">
+<table>
+<tr>
+<td width="50%" align="center">
+<img src="assets/ml_analysis_1.png" alt="ML Analysis Output" width="100%"/>
+</td>
+<td width="50%" align="center">
+<img src="assets/ml_analysis_2.png" alt="ML Analysis Details" width="100%"/>
+</td>
+</tr>
+</table>
 </div>
 
 ### 🥬 Deep Learning Inference Pipeline
